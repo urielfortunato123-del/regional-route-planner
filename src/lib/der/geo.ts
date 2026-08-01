@@ -65,7 +65,7 @@ export function paraLatLon({ x, y }: PontoDer): LatLon {
   let baixo = -40 * RAD;
   let alto = 6 * RAD;
   let fBaixo = alvo(baixo);
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 60; i++) {
     const meio = (baixo + alto) / 2;
     const fMeio = alvo(meio);
     if (fBaixo * fMeio <= 0) {

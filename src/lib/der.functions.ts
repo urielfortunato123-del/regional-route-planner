@@ -48,3 +48,32 @@ export const derMunicipio = createServerFn({ method: "POST" })
     const { municipioDoPonto } = await import("@/lib/der/der.server");
     return { municipio: await municipioDoPonto({ lat: data.lat, lon: data.lon }) };
   });
+
+export const derCamadas = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        sul: z.number().min(-35).max(5),
+        norte: z.number().min(-35).max(5),
+        oeste: z.number().min(-75).max(-30),
+        leste: z.number().min(-75).max(-30),
+        regional: z.number().int().min(1).max(20).nullable().optional(),
+        marcos: z.boolean().default(false),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { camadasNaArea } = await import("@/lib/der/der.server");
+    return camadasNaArea({
+      bbox: { sul: data.sul, norte: data.norte, oeste: data.oeste, leste: data.leste },
+      regional: data.regional ?? null,
+      marcos: data.marcos,
+    });
+  });
+
+export const derLimiteRegional = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ regional: z.number().int().min(1).max(20) }).parse(d))
+  .handler(async ({ data }) => {
+    const { limiteRegional } = await import("@/lib/der/der.server");
+    return { limite: await limiteRegional(data.regional), obtidoEm: Date.now() };
+  });

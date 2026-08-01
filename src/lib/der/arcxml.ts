@@ -26,6 +26,8 @@ export type FeatureDer = {
   campos: Record<string, string>;
   pontos: LatLon[];
   linhas: LatLon[][];
+  /** Anéis de polígonos (limites de municípios / regionais). */
+  aneis: LatLon[][];
 };
 
 function lerCoords(bloco: string): LatLon[] {
@@ -52,11 +54,17 @@ export function lerFeatures(xml: string): FeatureDer[] {
       const pts = lerCoords(caminho[1] ?? "");
       if (pts.length > 1) linhas.push(pts);
     }
-    const pontos = linhas.length ? [] : lerCoords(corpo);
-    saida.push({ campos: campos ? atributos(campos[0]) : {}, pontos, linhas });
+    const aneis: LatLon[][] = [];
+    for (const anel of corpo.matchAll(/<RING>([\s\S]*?)<\/RING>/gi)) {
+      const pts = lerCoords(anel[1] ?? "");
+      if (pts.length > 2) aneis.push(pts);
+    }
+    const pontos = linhas.length || aneis.length ? [] : lerCoords(corpo);
+    saida.push({ campos: campos ? atributos(campos[0]) : {}, pontos, linhas, aneis });
   }
   return saida;
 }
+
 
 /** Escapa valores usados dentro de cláusulas WHERE do ArcXML. */
 export function escaparValor(valor: string): string {

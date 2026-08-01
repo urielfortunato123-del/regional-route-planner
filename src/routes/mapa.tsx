@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { toast } from "sonner";
 import {
   Crosshair,
+  Layers,
   Database,
   Locate,
   MapPin,
@@ -16,11 +17,20 @@ import {
 
 import { AppShell, Botao, Campo, Cartao, Etiqueta, estiloEntrada } from "@/components/AppShell";
 import { Identificacao } from "@/components/Identificacao";
-import type { FocoMapa, LinhaMapa, MarcadorMapa } from "@/components/mapa/MapaLeaflet";
+import type {
+  AreaMapa,
+  CliqueRodoviaDer,
+  FocoMapa,
+  LinhaMapa,
+  MarcadorMapa,
+  MarcoDerMapa,
+} from "@/components/mapa/MapaLeaflet";
 import { usePerfilLocal } from "@/lib/perfil-local";
 import { listarProgramacoes } from "@/lib/programacao.functions";
 import { distanciaMetros } from "@/lib/der/geo";
 import {
+  carregarCamadasDer,
+  estimarKm,
   FONTE_DER,
   identificarPonto,
   limparCacheDer,
@@ -28,12 +38,15 @@ import {
   linkOsm,
   linkWaze,
   localizarTrecho,
+  numeroRegionalDer,
   observarContingencia,
   resumoCacheDer,
   statusServico,
   textoCoordenadas,
+  URL_SERVICO_DER,
   type TrechoLocalizado,
 } from "@/services/derMapService";
+
 
 const MapaLeaflet = lazy(() => import("@/components/mapa/MapaLeaflet"));
 
@@ -134,6 +147,19 @@ function MapaPagina() {
     lon: number;
     texto: string;
   } | null>(null);
+  // ---- camadas técnicas do DER-SP
+  const [area, setArea] = useState<AreaMapa | null>(null);
+  const [areaConsulta, setAreaConsulta] = useState<AreaMapa | null>(null);
+  const [verMalha, setVerMalha] = useState(true);
+  const [verMarcos, setVerMarcos] = useState(true);
+  const [verLimite, setVerLimite] = useState(true);
+  const [rodoviaDer, setRodoviaDer] = useState<
+    (CliqueRodoviaDer & { km: number | null; precisaoKm: string | null }) | null
+  >(null);
+  const [marcoDer, setMarcoDer] = useState<MarcoDerMapa | null>(null);
+  const [paradas, setParadas] = useState<
+    Array<{ id: string; rotulo: string; lat: number; lon: number }>
+  >([]);
 
   const { posicao, seguindo, iniciar, parar } = usePosicao();
 
@@ -144,11 +170,59 @@ function MapaPagina() {
     };
   }, []);
 
+  // espera o mapa parar de mover antes de pedir as camadas ao DER
+  useEffect(() => {
+    if (!area) return;
+    const t = setTimeout(() => setAreaConsulta(area), 450);
+    return () => clearTimeout(t);
+  }, [area]);
+
+  const zoom = areaConsulta?.zoom ?? 0;
+  const marcosVisiveis = verMarcos && zoom >= 12;
+  const chaveArea = areaConsulta
+    ? [
+        areaConsulta.bbox.sul.toFixed(2),
+        areaConsulta.bbox.oeste.toFixed(2),
+        areaConsulta.bbox.norte.toFixed(2),
+        areaConsulta.bbox.leste.toFixed(2),
+      ].join(",")
+    : "";
+
+  const camadas = useQuery({
+    queryKey: ["der-camadas", perfil?.regional_codigo, chaveArea, marcosVisiveis],
+    enabled: Boolean(areaConsulta) && zoom >= 9,
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      carregarCamadasDer({
+        bbox: areaConsulta!.bbox,
+        regionalCodigo: perfil?.regional_codigo ?? null,
+        marcos: marcosVisiveis,
+      }),
+  });
+
   const status = useQuery({
     queryKey: ["der-status"],
     queryFn: () => statusServico(),
     staleTime: 60_000,
   });
+
+  const aoClicarRodoviaDer = useCallback(async (c: CliqueRodoviaDer) => {
+    setMarcoDer(null);
+    setRodoviaDer({ ...c, km: null, precisaoKm: null });
+    const km = await estimarKm(c.rodovia.codigo, { lat: c.lat, lon: c.lon });
+    setRodoviaDer({ ...c, km: km?.km ?? null, precisaoKm: km?.precisao ?? null });
+  }, []);
+
+  const aoClicarMarcoDer = useCallback((m: MarcoDerMapa) => {
+    setRodoviaDer(null);
+    setMarcoDer(m);
+  }, []);
+
+  function adicionarParada(rotulo: string, lat: number, lon: number) {
+    setParadas((atual) => [...atual, { id: `${Date.now()}`, rotulo, lat, lon }]);
+    toast.success(`${rotulo} adicionado à rota.`);
+  }
+
 
   const programacao = useQuery({
     queryKey: ["mapa-programacoes", perfil?.id, visao],
@@ -350,6 +424,9 @@ function MapaPagina() {
     return saida;
   }, [servicos, resultadoBusca, rota]);
 
+  const camadasIndisponiveis =
+    Boolean(areaConsulta) && !camadas.isLoading && (camadas.isError || camadas.data == null);
+
   const cache = resumoCacheDer();
 
   if (!carregado) return null;
@@ -464,6 +541,42 @@ function MapaPagina() {
           ) : null}
         </Cartao>
 
+        <Cartao className="space-y-2 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Layers className="size-4 text-primary" />
+            <h2 className="font-display text-base font-semibold">Camadas do mapa</h2>
+            {camadas.isFetching ? (
+              <span className="text-xs text-muted-foreground">carregando camadas DER…</span>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            {[
+              { on: verMalha, set: setVerMalha, texto: "Malha rodoviária DER" },
+              { on: verMarcos, set: setVerMarcos, texto: "Marcos quilométricos DER" },
+              { on: verLimite, set: setVerLimite, texto: "Limite da regional DER" },
+            ].map((c) => (
+              <button
+                key={c.texto}
+                onClick={() => c.set(!c.on)}
+                aria-pressed={c.on}
+                className={`rounded-md border px-2.5 py-1 ${
+                  c.on
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-muted text-muted-foreground"
+                }`}
+              >
+                {c.on ? "✓ " : ""}
+                {c.texto}
+              </button>
+            ))}
+          </div>
+          {verMarcos && zoom < 12 ? (
+            <p className="text-[11px] text-muted-foreground">
+              Aproxime o mapa (zoom 12 ou mais) para exibir os marcos quilométricos oficiais.
+            </p>
+          ) : null}
+        </Cartao>
+
         <Cartao className="p-0">
           <Suspense
             fallback={
@@ -479,13 +592,228 @@ function MapaPagina() {
               foco={foco}
               aoClicar={aoClicarMapa}
               aoSelecionar={alternarSelecao}
+              derRodovias={camadas.data?.rodovias ?? []}
+              derMarcos={camadas.data?.marcos ?? []}
+              derLimite={camadas.data?.limite?.aneis ?? []}
+              mostrarDerRodovias={verMalha}
+              mostrarDerMarcos={marcosVisiveis}
+              mostrarDerLimite={verLimite}
+              aoMover={setArea}
+              aoClicarRodoviaDer={aoClicarRodoviaDer}
+              aoClicarMarcoDer={aoClicarMarcoDer}
             />
           </Suspense>
-          <p className="px-3 py-2 text-[11px] text-muted-foreground">
-            Base cartográfica OpenStreetMap. Referência quilométrica e malha rodoviária:{" "}
-            {FONTE_DER}. Toque no mapa para identificar a rodovia e o km do ponto.
-          </p>
+
+          {/* Identificação visual da fonte dos dados */}
+          <div className="space-y-1 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+            <p>
+              <strong className="text-foreground">Mapa-base:</strong> OpenStreetMap
+            </p>
+            <p>
+              <strong className="text-foreground">Dados rodoviários:</strong>{" "}
+              {camadasIndisponiveis ? (
+                <span className="font-semibold text-destructive">DER-SP: indisponíveis</span>
+              ) : (
+                <>
+                  DER-SP{" "}
+                  <span className="text-muted-foreground">
+                    (malha d23, marcos km 1193, regionais municipios — ArcIMS GeoWorldx)
+                  </span>
+                </>
+              )}
+            </p>
+            <p>
+              <strong className="text-foreground">Última atualização:</strong>{" "}
+              {camadas.data?.obtidoEm
+                ? new Date(camadas.data.obtidoEm).toLocaleString("pt-BR")
+                : "—"}
+              {camadas.data?.fonte === "cache" ? " (base salva no aparelho)" : ""}
+            </p>
+            <p>
+              Rodovias, marcos e limites carregados somente da regional{" "}
+              {perfil.regional_rotulo}
+              {camadas.data?.limite?.nome ? ` (DER: ${camadas.data.limite.nome})` : ""}.
+            </p>
+          </div>
         </Cartao>
+
+        {camadasIndisponiveis ? (
+          <Cartao className="border-destructive/60 bg-destructive/10 text-sm">
+            <p className="font-semibold">
+              Não foi possível carregar os dados rodoviários do DER.
+            </p>
+          </Cartao>
+        ) : null}
+        {camadas.data?.fonte === "cache" ? (
+          <Cartao className="border-warning/60 bg-warning/10 text-sm">
+            <p className="font-semibold">Camadas DER indisponíveis. Exibindo última base salva.</p>
+            <p className="text-muted-foreground">
+              Salva em {new Date(camadas.data.obtidoEm).toLocaleString("pt-BR")}.
+            </p>
+          </Cartao>
+        ) : null}
+        {camadas.data?.aviso ? (
+          <Cartao className="border-warning/60 bg-warning/10 text-sm">{camadas.data.aviso}</Cartao>
+        ) : null}
+
+        {rodoviaDer ? (
+          <Cartao className="space-y-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <strong className="text-base">{rodoviaDer.rodovia.codigo}</strong>
+              <Etiqueta tom="neutro">{rodoviaDer.rodovia.classe ?? "classe não informada"}</Etiqueta>
+              <Etiqueta tom={camadas.data?.fonte === "servico" ? "ok" : "alerta"}>
+                {camadas.data?.fonte === "servico" ? "camada DER-SP" : "cache local"}
+              </Etiqueta>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <div>
+                <dt className="font-semibold text-foreground">Nome oficial</dt>
+                <dd>{rodoviaDer.rodovia.nome || "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-foreground">Regional</dt>
+                <dd>{camadas.data?.limite?.nome ?? perfil.regional_rotulo}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-foreground">Km aproximado</dt>
+                <dd>
+                  {rodoviaDer.km != null
+                    ? `${rodoviaDer.km.toFixed(3).replace(".", ",")} (${rodoviaDer.precisaoKm})`
+                    : "calculando…"}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-foreground">Tipo de pista</dt>
+                <dd>{rodoviaDer.rodovia.pista || "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-foreground">Sentido</dt>
+                <dd>
+                  {(rodoviaDer.rodovia.pista ?? "").toLowerCase().includes("dupl")
+                    ? "crescente e decrescente (pista dupla)"
+                    : "pista única (ambos os sentidos)"}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-foreground">Coordenadas</dt>
+                <dd>{textoCoordenadas(rodoviaDer)}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="font-semibold text-foreground">Fonte</dt>
+                <dd>{FONTE_DER}</dd>
+              </div>
+            </dl>
+            <div className="flex flex-wrap gap-2">
+              <Botao
+                variante="contorno"
+                onClick={() =>
+                  adicionarParada(
+                    `${rodoviaDer.rodovia.codigo}${rodoviaDer.km != null ? ` km ${rodoviaDer.km.toFixed(3).replace(".", ",")}` : ""}`,
+                    rodoviaDer.lat,
+                    rodoviaDer.lon,
+                  )
+                }
+              >
+                Adicionar à rota
+              </Botao>
+              <Botao
+                variante="contorno"
+                onClick={() => {
+                  setRodoviaBusca(rodoviaDer.rodovia.codigo);
+                  if (rodoviaDer.km != null)
+                    setKmInicial(rodoviaDer.km.toFixed(3).replace(".", ","));
+                  toast.success("Definido como início do trecho.");
+                }}
+              >
+                Definir como início
+              </Botao>
+              <Botao
+                variante="contorno"
+                onClick={() => {
+                  setRodoviaBusca(rodoviaDer.rodovia.codigo);
+                  if (rodoviaDer.km != null) setKmFinal(rodoviaDer.km.toFixed(3).replace(".", ","));
+                  toast.success("Definido como fim do trecho.");
+                }}
+              >
+                Definir como fim
+              </Botao>
+              <a
+                className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-2 text-xs font-semibold text-primary"
+                href={linkGoogleMaps(rodoviaDer)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Navigation className="size-4" /> Navegar até aqui
+              </a>
+            </div>
+          </Cartao>
+        ) : null}
+
+        {marcoDer ? (
+          <Cartao className="space-y-1 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <strong className="text-base">
+                {marcoDer.codigo} • km {String(marcoDer.km).replace(".", ",")}
+              </strong>
+              <Etiqueta tom="ok">marco oficial DER-SP</Etiqueta>
+            </div>
+            <p className="text-muted-foreground">
+              Regional: {camadas.data?.limite?.nome ?? perfil.regional_rotulo} • Coordenadas:{" "}
+              {textoCoordenadas(marcoDer)}
+            </p>
+            <p className="text-muted-foreground">
+              Sentido: referência de pista única/ambos os sentidos • Precisão: posição oficial da
+              camada de marcos (1193) • Fonte: {FONTE_DER}
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Botao
+                variante="contorno"
+                onClick={() =>
+                  adicionarParada(
+                    `${marcoDer.codigo} km ${String(marcoDer.km).replace(".", ",")}`,
+                    marcoDer.lat,
+                    marcoDer.lon,
+                  )
+                }
+              >
+                Adicionar à rota
+              </Botao>
+              <a
+                className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-2 text-xs font-semibold text-primary"
+                href={linkGoogleMaps(marcoDer)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Navigation className="size-4" /> Navegar até aqui
+              </a>
+            </div>
+          </Cartao>
+        ) : null}
+
+        {paradas.length ? (
+          <Cartao className="space-y-2 text-sm">
+            <h2 className="font-display text-base font-semibold">Paradas marcadas no mapa DER</h2>
+            <ul className="divide-y divide-border">
+              {paradas.map((p, i) => (
+                <li key={p.id} className="flex items-center gap-2 py-1.5">
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    {i + 1}
+                  </span>
+                  <span className="flex-1">{p.rotulo}</span>
+                  <a href={linkWaze(p)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-primary">
+                    Navegar
+                  </a>
+                  <button
+                    className="text-xs text-muted-foreground"
+                    onClick={() => setParadas((a) => a.filter((x) => x.id !== p.id))}
+                  >
+                    remover
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Cartao>
+        ) : null}
 
         {pontoClicado ? (
           <Cartao className="text-sm">
@@ -494,6 +822,7 @@ function MapaPagina() {
             <p className="text-muted-foreground">{textoCoordenadas(pontoClicado)}</p>
           </Cartao>
         ) : null}
+
 
         <Cartao className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
