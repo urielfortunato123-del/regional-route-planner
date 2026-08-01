@@ -118,9 +118,12 @@ export type Database = {
           campos_corrigidos: string[]
           categoria: string | null
           chave_duplicidade: string | null
+          conferido_em: string | null
+          conferido_por: string | null
           contrato: string | null
           criado_em: string
           data_final: string | null
+          data_fora_periodo: boolean
           data_inicial: string | null
           descricao: string | null
           duplicado: boolean
@@ -132,15 +135,19 @@ export type Database = {
           km_final: number | null
           km_inicial: number | null
           medicao: string | null
+          motivo_conferencia: string | null
           motivos: string[]
           observacao: string | null
           pagina_pdf: number | null
+          periodo_fim_esperado: string | null
+          periodo_inicio_esperado: string | null
           programacao_id: string | null
           regional_codigo: string | null
           regional_confirmada: boolean
           regional_id: string | null
           regional_origem: string | null
           rodovia: string | null
+          status_conferencia: string
           status_validacao: string
           texto_original: string | null
           valores_extraidos: Json | null
@@ -151,9 +158,12 @@ export type Database = {
           campos_corrigidos?: string[]
           categoria?: string | null
           chave_duplicidade?: string | null
+          conferido_em?: string | null
+          conferido_por?: string | null
           contrato?: string | null
           criado_em?: string
           data_final?: string | null
+          data_fora_periodo?: boolean
           data_inicial?: string | null
           descricao?: string | null
           duplicado?: boolean
@@ -165,15 +175,19 @@ export type Database = {
           km_final?: number | null
           km_inicial?: number | null
           medicao?: string | null
+          motivo_conferencia?: string | null
           motivos?: string[]
           observacao?: string | null
           pagina_pdf?: number | null
+          periodo_fim_esperado?: string | null
+          periodo_inicio_esperado?: string | null
           programacao_id?: string | null
           regional_codigo?: string | null
           regional_confirmada?: boolean
           regional_id?: string | null
           regional_origem?: string | null
           rodovia?: string | null
+          status_conferencia?: string
           status_validacao?: string
           texto_original?: string | null
           valores_extraidos?: Json | null
@@ -184,9 +198,12 @@ export type Database = {
           campos_corrigidos?: string[]
           categoria?: string | null
           chave_duplicidade?: string | null
+          conferido_em?: string | null
+          conferido_por?: string | null
           contrato?: string | null
           criado_em?: string
           data_final?: string | null
+          data_fora_periodo?: boolean
           data_inicial?: string | null
           descricao?: string | null
           duplicado?: boolean
@@ -198,15 +215,19 @@ export type Database = {
           km_final?: number | null
           km_inicial?: number | null
           medicao?: string | null
+          motivo_conferencia?: string | null
           motivos?: string[]
           observacao?: string | null
           pagina_pdf?: number | null
+          periodo_fim_esperado?: string | null
+          periodo_inicio_esperado?: string | null
           programacao_id?: string | null
           regional_codigo?: string | null
           regional_confirmada?: boolean
           regional_id?: string | null
           regional_origem?: string | null
           rodovia?: string | null
+          status_conferencia?: string
           status_validacao?: string
           texto_original?: string | null
           valores_extraidos?: Json | null
@@ -624,9 +645,11 @@ export type Database = {
           categoria: string | null
           chave_duplicidade: string | null
           conferido_em: string | null
+          conferido_por: string | null
           contrato: string | null
           criado_em: string
           data_final: string | null
+          data_fora_periodo: boolean
           data_inicial: string | null
           descricao: string | null
           equipe: string | null
@@ -650,8 +673,11 @@ export type Database = {
           longitude_final: number | null
           longitude_inicial: number | null
           medicao: string | null
+          motivo_conferencia: string | null
           observacao: string | null
           pagina_pdf: number | null
+          periodo_fim_esperado: string | null
+          periodo_inicio_esperado: string | null
           persistido_em: string
           regional_codigo: string | null
           regional_confirmada: boolean
@@ -659,6 +685,7 @@ export type Database = {
           regional_origem: string | null
           rodovia: string | null
           status: string
+          status_conferencia: string
           status_geometria: string
           ultima_validacao_em: string | null
         }
@@ -671,9 +698,11 @@ export type Database = {
           categoria?: string | null
           chave_duplicidade?: string | null
           conferido_em?: string | null
+          conferido_por?: string | null
           contrato?: string | null
           criado_em?: string
           data_final?: string | null
+          data_fora_periodo?: boolean
           data_inicial?: string | null
           descricao?: string | null
           equipe?: string | null
@@ -697,8 +726,11 @@ export type Database = {
           longitude_final?: number | null
           longitude_inicial?: number | null
           medicao?: string | null
+          motivo_conferencia?: string | null
           observacao?: string | null
           pagina_pdf?: number | null
+          periodo_fim_esperado?: string | null
+          periodo_inicio_esperado?: string | null
           persistido_em?: string
           regional_codigo?: string | null
           regional_confirmada?: boolean
@@ -706,6 +738,7 @@ export type Database = {
           regional_origem?: string | null
           rodovia?: string | null
           status?: string
+          status_conferencia?: string
           status_geometria?: string
           ultima_validacao_em?: string | null
         }
@@ -718,9 +751,11 @@ export type Database = {
           categoria?: string | null
           chave_duplicidade?: string | null
           conferido_em?: string | null
+          conferido_por?: string | null
           contrato?: string | null
           criado_em?: string
           data_final?: string | null
+          data_fora_periodo?: boolean
           data_inicial?: string | null
           descricao?: string | null
           equipe?: string | null
@@ -744,8 +779,11 @@ export type Database = {
           longitude_final?: number | null
           longitude_inicial?: number | null
           medicao?: string | null
+          motivo_conferencia?: string | null
           observacao?: string | null
           pagina_pdf?: number | null
+          periodo_fim_esperado?: string | null
+          periodo_inicio_esperado?: string | null
           persistido_em?: string
           regional_codigo?: string | null
           regional_confirmada?: boolean
@@ -753,6 +791,7 @@ export type Database = {
           regional_origem?: string | null
           rodovia?: string | null
           status?: string
+          status_conferencia?: string
           status_geometria?: string
           ultima_validacao_em?: string | null
         }
