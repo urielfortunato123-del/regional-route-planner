@@ -58,6 +58,7 @@ function ProgramacaoPagina() {
   const [atividade, setAtividade] = useState("");
   const [contrato, setContrato] = useState("");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  const [somenteDivergentes, setSomenteDivergentes] = useState(false);
 
   const consulta = useQuery({
     queryKey: [
@@ -148,7 +149,13 @@ function ProgramacaoPagina() {
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
 
-  const registros = consulta.data?.registros ?? (cache as unknown as never[]);
+  const todos = consulta.data?.registros ?? (cache as unknown as never[]);
+  const registros = somenteDivergentes
+    ? todos.filter((r) => (r as { data_fora_periodo?: boolean }).data_fora_periodo)
+    : todos;
+  const divergentes = todos.filter(
+    (r) => (r as { data_fora_periodo?: boolean }).data_fora_periodo,
+  ).length;
 
   return (
     <AppShell perfil={perfil} titulo="Programação">
@@ -201,7 +208,22 @@ function ProgramacaoPagina() {
               />
               Minha programação
             </label>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--color-primary)]"
+                checked={somenteDivergentes}
+                onChange={(e) => setSomenteDivergentes(e.target.checked)}
+              />
+              Só data fora do período
+            </label>
           </Cartao>
+        ) : null}
+
+        {divergentes > 0 ? (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
+            {divergentes} serviço(s) com data fora do período do PDF aguardando conferência.
+          </p>
         ) : null}
 
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -225,6 +247,9 @@ function ProgramacaoPagina() {
                   {r.status.replace(/_/g, " ")}
                 </Etiqueta>
                 {!r.regional_confirmada ? <Etiqueta tom="erro">Regional não confirmada</Etiqueta> : null}
+                {(r as { data_fora_periodo?: boolean }).data_fora_periodo ? (
+                  <Etiqueta tom="erro">data fora do período</Etiqueta>
+                ) : null}
               </div>
 
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
