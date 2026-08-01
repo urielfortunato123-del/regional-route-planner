@@ -382,7 +382,21 @@ export async function lerProgramacaoPdf(
           continue;
         }
       }
-      if (!linhaEhDado(texto)) continue;
+      if (!linhaEhDado(texto)) {
+        // continuação de célula (descrição/observação quebrada em várias linhas)
+        const anterior = registros[registros.length - 1];
+        if (anterior && linha && colunas && anterior.pagina_pdf === numeroPagina) {
+          const partes = distribuirEmColunas(linha, colunas);
+          for (const campo of ["descricao", "observacao"] as const) {
+            const valor = partes[campo];
+            if (valor && textoUtil(valor)) {
+              anterior[campo] = anterior[campo] ? `${anterior[campo]} ${valor}` : valor;
+            }
+          }
+        }
+        continue;
+      }
+
 
       const porAncoras = extrairPorAncoras(texto);
       const porColunas = linha && colunas ? distribuirEmColunas(linha, colunas) : null;
