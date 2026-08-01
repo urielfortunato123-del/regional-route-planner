@@ -158,6 +158,8 @@ export default function MapaLeaflet({
       cliqueRef.current?.({ lat: e.latlng.lat, lon: e.latlng.lng }),
     );
     const avisarArea = () => {
+      // após m.remove() o painel some: getBounds() quebraria
+      if (!m.getPane("mapPane")) return;
       const b = m.getBounds();
       moverRef.current?.({
         bbox: { sul: b.getSouth(), oeste: b.getWest(), norte: b.getNorth(), leste: b.getEast() },
@@ -166,11 +168,13 @@ export default function MapaLeaflet({
     };
     m.on("moveend", avisarArea);
     mapa.current = m;
-    setTimeout(() => {
+    const t = setTimeout(() => {
+      if (!m.getPane("mapPane")) return;
       m.invalidateSize();
       avisarArea();
     }, 120);
     return () => {
+      clearTimeout(t);
       m.remove();
       mapa.current = null;
     };
