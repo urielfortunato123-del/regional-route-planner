@@ -43,7 +43,7 @@ export async function carregarPerfil(funcionarioId: string): Promise<Perfil> {
 }
 
 export const COLUNAS_PROGRAMACAO =
-  "id, regional_id, regional_codigo, regional_confirmada, equipe, funcionario, categoria, contrato, atividade, rodovia, km_inicial, km_final, descricao, data_inicial, data_final, medicao, observacao, pagina_pdf, status, assumido_por, assumido_em, latitude_inicial, longitude_inicial, latitude_final, longitude_final, localizacao_confirmada, arquivo_id, importacao_id";
+  "id, regional_id, regional_codigo, regional_confirmada, equipe, funcionario, categoria, contrato, atividade, rodovia, km_inicial, km_final, descricao, data_inicial, data_final, medicao, observacao, pagina_pdf, status, assumido_por, assumido_em, latitude_inicial, longitude_inicial, latitude_final, longitude_final, localizacao_confirmada, arquivo_id, importacao_id, status_geometria, geometria_fonte, geometria_precisao, geometria_erro, geometria, geometria_processada_em, persistido_em, ultima_validacao_em, atualizado_em";
 
 /** Chave usada para detectar registros repetidos entre importações. */
 export function montarChaveDuplicidade(r: {

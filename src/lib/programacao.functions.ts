@@ -578,6 +578,8 @@ export const salvarRota = createServerFn({ method: "POST" })
             origem: z.string().optional(),
           })
           .nullable(),
+        origemTipo: z.string().max(40).nullable().optional(),
+        algoritmo: z.string().max(60).nullable().optional(),
         distanciaTotal: z.number().nullable().optional(),
         tempoEstimado: z.number().int().nullable().optional(),
         itens: z
@@ -633,6 +635,17 @@ export const salvarRota = createServerFn({ method: "POST" })
     );
     if (problemas.length) throw new Error(textoDosProblemas(problemas));
 
+    // Versão da programação vigente (para avisar quando a rota ficar defasada).
+    let programacaoVersao: number | null = null;
+    if (data.importacaoId) {
+      const { data: imp } = await supabaseAdmin
+        .from("importacoes_pdf")
+        .select("programacao_versao, versao")
+        .eq("id", data.importacaoId)
+        .maybeSingle();
+      programacaoVersao = imp?.programacao_versao ?? imp?.versao ?? null;
+    }
+
     const cabecalho = {
       usuario_id: perfil.id,
       usuario_nome: perfil.nome,
@@ -644,13 +657,30 @@ export const salvarRota = createServerFn({ method: "POST" })
       tempo_estimado: data.tempoEstimado ?? null,
       importacao_id: data.importacaoId ?? null,
       status: data.situacao,
+      origem_tipo: data.origemTipo ?? data.pontoInicial?.origem ?? null,
+      origem_coordenadas: data.pontoInicial
+        ? { latitude: data.pontoInicial.latitude, longitude: data.pontoInicial.longitude }
+        : null,
+      algoritmo_roteamento: data.algoritmo ?? (data.tipo === "sugerida" ? "vizinho_mais_proximo_osrm" : "manual"),
+      servicos_ids: ids,
+      quantidade_servicos: data.itens.length,
+      programacao_versao: programacaoVersao,
+      gerada_em: new Date().toISOString(),
     };
 
     let rotaId = data.rotaId ?? null;
+    let versaoRota = 1;
     if (rotaId) {
+      const { data: atual } = await supabaseAdmin
+        .from("rotas")
+        .select("versao_rota")
+        .eq("id", rotaId)
+        .eq("regional_id", perfil.regional_id)
+        .maybeSingle();
+      versaoRota = (atual?.versao_rota ?? 1) + 1;
       const { error } = await supabaseAdmin
         .from("rotas")
-        .update(cabecalho)
+        .update({ ...cabecalho, versao_rota: versaoRota })
         .eq("id", rotaId)
         .eq("regional_id", perfil.regional_id);
       if (error) throw new Error(error.message);
@@ -658,11 +688,12 @@ export const salvarRota = createServerFn({ method: "POST" })
     } else {
       const { data: criada, error } = await supabaseAdmin
         .from("rotas")
-        .insert(cabecalho)
-        .select("id")
+        .insert({ ...cabecalho, versao_rota: 1 })
+        .select("id, versao_rota")
         .single();
       if (error) throw new Error(error.message);
       rotaId = criada.id;
+      versaoRota = criada.versao_rota ?? 1;
     }
 
     const { error: erroItens } = await supabaseAdmin.from("rota_itens").insert(
@@ -686,7 +717,7 @@ export const salvarRota = createServerFn({ method: "POST" })
       .eq("regional_id", perfil.regional_id)
       .eq("status", "pendente");
 
-    return { ok: true, rotaId, itens: data.itens.length };
+    return { ok: true, rotaId, versaoRota, itens: data.itens.length };
   });
 
 export const listarRotas = createServerFn({ method: "POST" })

@@ -103,6 +103,8 @@ function RotaPagina() {
   const [ordem, setOrdem] = useState<string[]>([]);
   const [tipo, setTipo] = useState<"sugerida" | "manual">("sugerida");
   const [partida, setPartida] = useState<{ rotulo: string; lat: number; lon: number } | null>(null);
+  const [origemTipo, setOrigemTipo] = useState<"gps" | "primeiro_servico" | null>(null);
+  const [origemConfirmada, setOrigemConfirmada] = useState(false);
   const [localizando, setLocalizando] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [formulario, setFormulario] = useState<{
@@ -258,12 +260,15 @@ function RotaPagina() {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (p) =>
+      (p) => {
         setPartida({
           rotulo: "Minha localização",
           lat: p.coords.latitude,
           lon: p.coords.longitude,
-        }),
+        });
+        setOrigemTipo("gps");
+        setOrigemConfirmada(false);
+      },
       () => toast.error("Não foi possível obter a localização. Autorize o GPS."),
       { enableHighAccuracy: true, timeout: 15000 },
     );
@@ -367,6 +372,14 @@ function RotaPagina() {
   }
 
   function sugerirOrdem() {
+    if (!partida) {
+      toast.error("Escolha o ponto de partida antes de gerar a rota.");
+      return;
+    }
+    if (!origemConfirmada) {
+      toast.error("Confirme o ponto de partida para gerar a rota.");
+      return;
+    }
     void calcularNaMalha(selecionados, true);
   }
 
@@ -431,6 +444,8 @@ function RotaPagina() {
         pontoInicial: partida
           ? { rotulo: partida.rotulo, latitude: partida.lat, longitude: partida.lon }
           : null,
+        origemTipo,
+        algoritmo: tipo === "sugerida" ? "vizinho_mais_proximo_osrm" : "manual",
         distanciaTotal: Number(distanciaTotal.toFixed(2)),
         tempoEstimado: tempoTotal,
         situacao: "ativa" as const,
@@ -729,6 +744,8 @@ function RotaPagina() {
                 onClick={() => {
                   const primeiro = servicos.find((s) => s.lat != null)!;
                   setPartida({ rotulo: primeiro.rotulo, lat: primeiro.lat!, lon: primeiro.lon! });
+                  setOrigemTipo("primeiro_servico");
+                  setOrigemConfirmada(false);
                 }}
               >
                 <MapPin className="size-4" /> Primeiro serviço
@@ -740,6 +757,23 @@ function RotaPagina() {
               ? `${partida.rotulo} — ${partida.lat.toFixed(5)}, ${partida.lon.toFixed(5)}`
               : "Nenhum ponto de partida definido."}
           </p>
+          {partida ? (
+            <label className="flex items-start gap-2 rounded-lg border border-border bg-surface p-3 text-xs">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4"
+                checked={origemConfirmada}
+                onChange={(e) => setOrigemConfirmada(e.target.checked)}
+              />
+              <span>
+                Confirmo que a rota deve começar em{" "}
+                <strong>
+                  {partida.rotulo} ({origemTipo === "gps" ? "GPS do aparelho" : "primeiro serviço"})
+                </strong>
+                . Sem essa confirmação a rota não é gerada.
+              </span>
+            </label>
+          ) : null}
         </Cartao>
 
         {servicos.length ? (
