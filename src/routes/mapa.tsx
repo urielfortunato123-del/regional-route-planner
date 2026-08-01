@@ -752,6 +752,23 @@ function MapaPagina() {
               { on: verMalha, set: setVerMalha, texto: "Malha rodoviária DER" },
               { on: verMarcos, set: setVerMarcos, texto: "Marcos quilométricos DER" },
               { on: verLimite, set: setVerLimite, texto: "Limite da regional DER" },
+              {
+                on: verTrechos,
+                set: setVerTrechos,
+                texto: `Trechos programados (${servicos.length})`,
+              },
+              { on: verConcluidos, set: setVerConcluidos, texto: "Serviços concluídos" },
+              {
+                on: verInspecoes,
+                set: setVerInspecoes,
+                texto: `Inspeções (${listaInspecoes.length})`,
+              },
+              {
+                on: verOcorrencias,
+                set: setVerOcorrencias,
+                texto: `Ocorrências (${listaOcorrencias.length})`,
+              },
+              { on: verRota, set: setVerRota, texto: "Rota sugerida" },
             ].map((c) => (
               <button
                 key={c.texto}
@@ -773,6 +790,27 @@ function MapaPagina() {
               Aproxime o mapa (zoom 12 ou mais) para exibir os marcos quilométricos oficiais.
             </p>
           ) : null}
+          <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+            {[
+              { cor: CORES_STATUS["pendente"]!, texto: "serviço pendente" },
+              { cor: CORES_STATUS["em_rota"]!, texto: "em rota" },
+              { cor: CORES_STATUS["concluido"]!, texto: "concluído" },
+              { cor: "#0f766e", texto: "ponto de acesso" },
+              { cor: "#7c3aed", texto: "inspeção" },
+              { cor: "#dc2626", texto: "ocorrência (por prioridade)" },
+            ].map((l) => (
+              <span key={l.texto} className="flex items-center gap-1">
+                <span
+                  className="inline-block size-2.5 rounded-full"
+                  style={{ backgroundColor: l.cor }}
+                />
+                {l.texto}
+              </span>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Todas as camadas mostram apenas dados da regional {perfil.regional_rotulo}.
+          </p>
         </Cartao>
 
         <Cartao className="p-0">
@@ -1014,10 +1052,18 @@ function MapaPagina() {
         ) : null}
 
         {pontoClicado ? (
-          <Cartao className="text-sm">
+          <Cartao className="space-y-2 text-sm">
             <p className="font-semibold">Ponto consultado</p>
             <p className="text-muted-foreground">{pontoClicado.texto}</p>
             <p className="text-muted-foreground">{textoCoordenadas(pontoClicado)}</p>
+            <div className="flex flex-wrap gap-2">
+              <Botao variante="contorno" onClick={() => abrirFormulario("inspecao")}>
+                <ClipboardCheck className="size-4" /> Nova inspeção
+              </Botao>
+              <Botao variante="contorno" onClick={() => abrirFormulario("ocorrencia")}>
+                <ShieldAlert className="size-4" /> Nova ocorrência
+              </Botao>
+            </div>
           </Cartao>
         ) : null}
 
@@ -1047,9 +1093,13 @@ function MapaPagina() {
               <RefreshCw className={`size-4 ${localizando ? "animate-spin" : ""}`} />
               {localizando ? `Localizando… ${progresso}%` : "Posicionar no mapa"}
             </Botao>
-            <Botao variante="destaque" onClick={gerarRota} disabled={servicos.length < 2}>
+            <Botao
+              variante="destaque"
+              onClick={() => void gerarRota()}
+              disabled={servicos.length < 1 || gerandoRota}
+            >
               <RotaIcone className="size-4" />
-              Gerar roteiro
+              {gerandoRota ? "Calculando pela estrada…" : "Gerar rota sugerida"}
             </Botao>
           </div>
 
