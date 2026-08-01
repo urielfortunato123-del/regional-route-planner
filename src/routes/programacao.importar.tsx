@@ -250,6 +250,46 @@ function ImportarPagina() {
               ))}
             </div>
 
+            <details className="rounded-md border border-border">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
+                Diagnóstico da leitura ({resultado.diagnostico.length} linha(s))
+              </summary>
+              <div className="max-h-80 overflow-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-surface">
+                    <tr>
+                      <th className="px-2 py-1">Pág.</th>
+                      <th className="px-2 py-1">Linha</th>
+                      <th className="px-2 py-1">Texto original</th>
+                      <th className="px-2 py-1">Regional</th>
+                      <th className="px-2 py-1">Status</th>
+                      <th className="px-2 py-1">Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultado.diagnostico.map((d, i) => (
+                      <tr key={`${d.pagina}-${d.linha}-${i}`} className="border-t border-border/60 align-top">
+                        <td className="px-2 py-1">{d.pagina}</td>
+                        <td className="px-2 py-1">{d.linha}</td>
+                        <td className="max-w-[18rem] px-2 py-1">{d.texto}</td>
+                        <td className="px-2 py-1">{d.regional ? rotuloRegional(d.regional) : "—"}</td>
+                        <td className="px-2 py-1 font-semibold">
+                          {d.status === "aceita"
+                            ? "Aceita"
+                            : d.status === "conferencia"
+                              ? "Em conferência"
+                              : "Ignorada"}
+                        </td>
+                        <td className="max-w-[14rem] px-2 py-1 text-muted-foreground">{d.motivo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+
+
+
             {comProblema > 0 ? (
               <p className="flex items-start gap-2 rounded-md bg-warning/15 px-3 py-2 text-sm text-warning-foreground">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
