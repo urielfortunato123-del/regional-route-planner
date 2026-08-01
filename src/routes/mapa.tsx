@@ -171,8 +171,8 @@ function MapaPagina() {
     const encontrados: ServicoLocalizado[] = [];
     const faltando: string[] = [];
     for (let i = 0; i < registros.length; i++) {
-      const r = registros[i] as Record<string, string | number | null>;
-      const campo = (k: string) => r[k];
+      const r = registros[i]!;
+      const campo = (k: string) => (r as unknown as Record<string, string | number | null>)[k];
       const trecho = campo("rodovia")
         ? await localizarTrecho(String(campo("rodovia")), campo("km_inicial") ?? "", campo("km_final"))
         : null;
@@ -292,7 +292,7 @@ function MapaPagina() {
 
   const marcadores = useMemo<MarcadorMapa[]>(() => {
     const lista: MarcadorMapa[] = servicos.map((s) => {
-      const ordem = rota?.findIndex((r) => campo("id") === s.id) ?? -1;
+      const ordem = rota?.findIndex((r) => r.id === s.id) ?? -1;
       return {
         id: s.id,
         lat: s.trecho.inicio.lat,
