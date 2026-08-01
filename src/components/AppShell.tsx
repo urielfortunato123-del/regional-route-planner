@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { CalendarRange, Home, Settings, Upload } from "lucide-react";
+import { CalendarRange, Home, Map, Settings, Upload } from "lucide-react";
 
 import type { PerfilLocal } from "@/lib/perfil-local";
 import { cn } from "@/lib/utils";
@@ -105,6 +105,7 @@ export function Etiqueta({
 const itensMenu = [
   { para: "/", rotulo: "Início", icone: Home },
   { para: "/programacao", rotulo: "Programação", icone: CalendarRange },
+  { para: "/mapa", rotulo: "Mapa", icone: Map },
   { para: "/programacao/importar", rotulo: "Importar", icone: Upload },
   { para: "/configuracoes", rotulo: "Ajustes", icone: Settings },
 ] as const;
