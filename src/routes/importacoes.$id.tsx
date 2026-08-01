@@ -60,6 +60,8 @@ type Registro = {
   duplicado: boolean | null;
   status_validacao: string;
   motivos: string[] | null;
+  programacao_id?: string | null;
+
   foi_corrigido: boolean | null;
 };
 
