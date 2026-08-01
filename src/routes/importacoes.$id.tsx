@@ -232,10 +232,11 @@ function ConferenciaPagina() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Botao disabled={confirmar.isPending || validos === 0} onClick={() => confirmar.mutate()}>
+              <Botao disabled={confirmar.isPending || aSalvar === 0} onClick={() => confirmar.mutate()}>
                 <CheckCircle2 className="size-4" />
-                {confirmar.isPending ? "Liberando..." : `Confirmar ${validos} linha(s)`}
+                {confirmar.isPending ? "Salvando..." : `Salvar ${aSalvar} serviço(s) na programação`}
               </Botao>
+
               <Botao variante="contorno" onClick={() => abrirPdf.mutate()}>
                 <FileDown className="size-4" /> Ver PDF original
               </Botao>
