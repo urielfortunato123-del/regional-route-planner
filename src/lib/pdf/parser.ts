@@ -382,20 +382,32 @@ export async function lerProgramacaoPdf(
           continue;
         }
       }
+      const yLinha = linha?.length ? linha.reduce((s, p) => s + p.y, 0) / linha.length : null;
+
       if (!linhaEhDado(texto)) {
         // continuação de célula (descrição/observação quebrada em várias linhas)
         const anterior = registros[registros.length - 1];
         if (anterior && linha && colunas && anterior.pagina_pdf === numeroPagina) {
           const partes = distribuirEmColunas(linha, colunas);
+          // y maior significa acima na página: o fragmento vem antes do texto já lido
+          const acima = yLinha !== null && yAnterior !== null && yLinha > yAnterior;
           for (const campo of ["descricao", "observacao"] as const) {
             const valor = partes[campo];
             if (valor && textoUtil(valor)) {
-              anterior[campo] = anterior[campo] ? `${anterior[campo]} ${valor}` : valor;
+              const atual = anterior[campo];
+              anterior[campo] = atual
+                ? acima
+                  ? `${valor} ${atual}`
+                  : `${atual} ${valor}`
+                : valor;
             }
           }
         }
         continue;
       }
+
+      yAnterior = yLinha;
+
 
 
       const porAncoras = extrairPorAncoras(texto);
