@@ -374,7 +374,9 @@ export async function lerProgramacaoPdf(
       ? linhas.map((l) => ({ linha: l, texto: l.map((p) => p.texto).join(" ") }))
       : (linhasTexto ?? []).map((texto) => ({ linha: null, texto }));
 
+    let yAnterior: number | null = null;
     for (const { linha, texto } of fontesDeLinha) {
+
       if (linha) {
         const possivelCabecalho = lerCabecalho(linha);
         if (possivelCabecalho) {
