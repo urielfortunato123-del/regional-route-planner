@@ -27,6 +27,7 @@ import type {
   MarcadorMapa,
   MarcoDerMapa,
 } from "@/components/mapa/MapaLeaflet";
+import { importarComRetry } from "@/lib/importar-com-retry";
 import { usePerfilLocal } from "@/lib/perfil-local";
 import { listarProgramacoes } from "@/lib/programacao.functions";
 import { listarInspecoes, listarOcorrencias } from "@/lib/campo.functions";
