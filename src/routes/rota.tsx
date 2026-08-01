@@ -242,17 +242,11 @@ function RotaPagina() {
     [ordem, porId],
   );
 
-  function sugerirOrdem() {
-    const base = selecionados
-      .map((id) => porId.get(id))
-      .filter((s): s is Servico => !!s && s.lat != null && s.lon != null);
-    if (!partida) {
-      toast.error("Defina o ponto de partida antes de gerar a rota sugerida.");
-      return;
-    }
+  /** Vizinho mais próximo em linha reta — usado quando o serviço de rotas não responde. */
+  function ordemPorProximidade(base: Servico[], origem: { lat: number; lon: number }) {
     const restantes = [...base];
     const sequencia: Servico[] = [];
-    let atual = { lat: partida.lat, lon: partida.lon };
+    let atual = origem;
     while (restantes.length) {
       let melhor = 0;
       let menor = Number.POSITIVE_INFINITY;
@@ -267,9 +261,80 @@ function RotaPagina() {
       sequencia.push(escolhido);
       atual = { lat: escolhido.lat!, lon: escolhido.lon! };
     }
-    setOrdem(sequencia.map((s) => s.id));
-    setTipo("sugerida");
-    toast.success("Ordem sugerida por proximidade.");
+    return sequencia;
+  }
+
+  /** Distâncias e tempos pela malha viária (OSRM). `otimizar` reordena as paradas. */
+  async function calcularNaMalha(ids: string[], otimizar: boolean) {
+    if (!partida) {
+      toast.error("Defina o ponto de partida antes de calcular a rota.");
+      return;
+    }
+    const base = ids
+      .map((id) => porId.get(id))
+      .filter((s): s is Servico => !!s && s.lat != null && s.lon != null);
+    if (!base.length) {
+      toast.error("Nenhum serviço com posição válida para montar a rota.");
+      return;
+    }
+    setCalculando(true);
+    try {
+      const resposta = await calcularPercurso({
+        data: {
+          pontos: [
+            { lat: partida.lat, lon: partida.lon },
+            ...base.map((s) => ({ lat: s.lat!, lon: s.lon! })),
+          ],
+          otimizar,
+        },
+      });
+
+      if (resposta.disponivel) {
+        const sequencia = otimizar
+          ? resposta.ordem
+              .filter((i) => i > 0)
+              .map((i) => base[i - 1])
+              .filter((s): s is Servico => !!s)
+          : base;
+        setOrdem(sequencia.map((s) => s.id));
+        setPercurso({
+          disponivel: true,
+          pernas: resposta.pernas,
+          distanciaTotalKm: resposta.distanciaTotalKm,
+          tempoTotalMin: resposta.tempoTotalMin,
+          geometria: resposta.geometria,
+        });
+        setTipo(otimizar ? "sugerida" : tipo);
+        toast.success(
+          `Rota calculada pela malha viária: ${resposta.distanciaTotalKm.toFixed(1)} km.`,
+        );
+        return;
+      }
+
+      const sequencia = otimizar
+        ? ordemPorProximidade(base, { lat: partida.lat, lon: partida.lon })
+        : base;
+      setOrdem(sequencia.map((s) => s.id));
+      setPercurso({
+        disponivel: false,
+        motivo: resposta.motivo ?? "Serviço de rotas indisponível.",
+        pernas: [],
+        distanciaTotalKm: 0,
+        tempoTotalMin: 0,
+        geometria: [],
+      });
+      if (otimizar) setTipo("sugerida");
+      toast.warning("Serviço de rotas indisponível: usando distância aproximada por proximidade.");
+    } catch {
+      setPercurso(null);
+      toast.error("Não foi possível calcular a rota agora.");
+    } finally {
+      setCalculando(false);
+    }
+  }
+
+  function sugerirOrdem() {
+    void calcularNaMalha(selecionados, true);
   }
 
   function mover(id: string, direcao: -1 | 1) {
@@ -283,6 +348,7 @@ function RotaPagina() {
       return copia;
     });
     setTipo("manual");
+    setPercurso(null);
   }
 
   const itensRota: ItemRota[] = itensOrdenados
@@ -305,7 +371,7 @@ function RotaPagina() {
       )
     : [];
 
-  const distanciaTotal = useMemo(() => {
+  const distanciaAproximada = useMemo(() => {
     if (!partida || itensRota.length === 0) return 0;
     let total = 0;
     let atual = { lat: partida.lat, lon: partida.lon };
@@ -317,6 +383,12 @@ function RotaPagina() {
     return total;
   }, [itensRota, partida]);
 
+  const percursoReal = !!percurso?.disponivel;
+  const distanciaTotal = percursoReal ? percurso!.distanciaTotalKm : distanciaAproximada;
+  const tempoTotal = percursoReal
+    ? percurso!.tempoTotalMin
+    : Math.round((distanciaAproximada / 50) * 60) + itensRota.length * 20;
+
   const gravarRota = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -327,13 +399,16 @@ function RotaPagina() {
           ? { rotulo: partida.rotulo, latitude: partida.lat, longitude: partida.lon }
           : null,
         distanciaTotal: Number(distanciaTotal.toFixed(2)),
-        tempoEstimado: Math.round((distanciaTotal / 50) * 60) + itensRota.length * 20,
-        itens: itensRota.map((i) => ({
+        tempoEstimado: tempoTotal,
+        situacao: "ativa" as const,
+        itens: itensRota.map((i, idx) => ({
           programacaoId: i.programacaoId,
           ordem: i.ordem,
           rotulo: i.rotulo,
           latitude: i.latitude!,
           longitude: i.longitude!,
+          distanciaAnterior: percurso?.pernas[idx]?.distanciaKm ?? null,
+          tempoAnterior: percurso?.pernas[idx]?.tempoMin ?? null,
         })),
       };
       if (typeof navigator !== "undefined" && !navigator.onLine) {
