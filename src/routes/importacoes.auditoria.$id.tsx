@@ -214,6 +214,19 @@ function AuditoriaPagina() {
           </div>
         </Cartao>
 
+        {(etapas?.datasDivergentes ?? 0) > 0 ? (
+          <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+            <p>
+              {etapas?.datasDivergentes} serviço(s) com data fora do período informado no PDF
+              {importacao?.periodo_inicio
+                ? ` (${importacao.periodo_inicio} a ${importacao.periodo_fim})`
+                : ""}
+              . Eles continuam gravados, mas precisam de conferência antes de entrar na rota.
+            </p>
+          </div>
+        ) : null}
+
         <Cartao>
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Caminho dos serviços</h2>
           {auditoria.isPending ? (
@@ -236,6 +249,11 @@ function AuditoriaPagina() {
               />
               <Numero rotulo="Elegíveis para rota" valor={etapas?.elegiveisRota ?? 0} />
               <Numero rotulo="Concluídos" valor={etapas?.concluidos ?? 0} />
+              <Numero
+                rotulo="Data divergente"
+                valor={etapas?.datasDivergentes ?? 0}
+                alerta={(etapas?.datasDivergentes ?? 0) > 0}
+              />
             </div>
           )}
 
@@ -332,6 +350,42 @@ function AuditoriaPagina() {
           </Cartao>
         ) : null}
 
+        {referencia ? (
+          <Cartao>
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide">
+              Validação do arquivo de referência
+            </h2>
+            <p className="mb-2 text-xs text-muted-foreground">
+              {referencia.aplicavel
+                ? `Arquivo reconhecido: ${referencia.descricao}`
+                : "Arquivo sem expectativa cadastrada — conferindo apenas os totais gerais."}
+            </p>
+            <ul className="space-y-1">
+              {referencia.itens.map((item) => (
+                <li
+                  key={item.titulo}
+                  className="flex items-start gap-2 rounded-lg border border-border bg-surface p-2 text-xs"
+                >
+                  {item.ok ? (
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+                  ) : (
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  )}
+                  <span>
+                    <strong>{item.titulo}</strong>: esperado {item.esperado}, encontrado{" "}
+                    {item.encontrado}. {item.detalhe}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs font-semibold">
+              {referencia.aprovado
+                ? "Leitura aprovada: as contagens batem com o arquivo de referência."
+                : "Leitura reprovada: há divergência de contagem — verifique o diagnóstico abaixo."}
+            </p>
+          </Cartao>
+        ) : null}
+
         <Cartao>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-bold uppercase tracking-wide">Diagnóstico por registro</h2>
@@ -341,6 +395,8 @@ function AuditoriaPagina() {
                   ["todos", "Todos"],
                   ["bloqueados", "Fora da rota"],
                   ["sem_geometria", "Sem coordenada"],
+                  ["data_divergente", "Data divergente"],
+                  ["sem_regional", "Sem regional"],
                 ] as const
               ).map(([valor, rotulo]) => (
                 <button
@@ -356,13 +412,60 @@ function AuditoriaPagina() {
             </div>
           </div>
 
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <label className="flex flex-1 items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+              <Search className="size-4 text-muted-foreground" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por rodovia, km, data, equipe, atividade ou texto"
+                className="w-full bg-transparent text-sm outline-none"
+              />
+            </label>
+            <Botao
+              variante="contorno"
+              onClick={() =>
+                exportarDiagnosticoCsv(importacao?.nome_arquivo ?? "importacao", linhasExportacao)
+              }
+            >
+              <FileSpreadsheet className="size-4" />
+              Exportar CSV
+            </Botao>
+            <Botao
+              variante="contorno"
+              onClick={() =>
+                exportarDiagnosticoPdf({
+                  nomeArquivo: importacao?.nome_arquivo ?? "importacao",
+                  regional: perfil.regional_codigo,
+                  funcionario: perfil.nome,
+                  resumo: [
+                    { rotulo: "Páginas", valor: etapas?.paginasPdf ?? 0 },
+                    { rotulo: "Linhas lidas", valor: etapas?.linhasBrutas ?? 0 },
+                    { rotulo: "Gravadas", valor: etapas?.registrosSalvos ?? 0 },
+                    { rotulo: "Programação", valor: etapas?.exibidosProgramacao ?? 0 },
+                    { rotulo: "Mapa", valor: etapas?.exibidosMapa ?? 0 },
+                    { rotulo: "Rota", valor: etapas?.elegiveisRota ?? 0 },
+                    { rotulo: "Data divergente", valor: etapas?.datasDivergentes ?? 0 },
+                  ],
+                  validacoes: referencia?.itens ?? [],
+                  linhas: linhasExportacao,
+                })
+              }
+            >
+              <FileDown className="size-4" />
+              Exportar PDF
+            </Botao>
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            <table className="w-full min-w-[1100px] text-left text-xs">
               <thead className="text-muted-foreground">
                 <tr>
                   <th className="p-2">Pág</th>
                   <th className="p-2">Serviço</th>
                   <th className="p-2">Regional</th>
+                  <th className="p-2">Datas</th>
+                  <th className="p-2">Conferência</th>
                   <th className="p-2">Persistência</th>
                   <th className="p-2">Geometria</th>
                   <th className="p-2">Programação</th>
@@ -385,6 +488,15 @@ function AuditoriaPagina() {
                     </td>
                     <td className="p-2">{r.regional_codigo ?? "não identificada"}</td>
                     <td className="p-2">
+                      {r.data_inicial ?? "—"}
+                      {r.data_final && r.data_final !== r.data_inicial ? ` a ${r.data_final}` : ""}
+                    </td>
+                    <td className="p-2">
+                      <Etiqueta tom={r.data_fora_periodo ? "erro" : r.status_conferencia === "OK" ? "ok" : "aviso"}>
+                        {r.data_fora_periodo ? "DATA FORA DO PERÍODO" : r.status_conferencia}
+                      </Etiqueta>
+                    </td>
+                    <td className="p-2">
                       {r.status_persistencia === "persistido" ? "Gravado" : "Em conferência"}
                     </td>
                     <td className="p-2">{rotuloStatusGeometria(r.status_geometria)}</td>
@@ -397,7 +509,7 @@ function AuditoriaPagina() {
                 ))}
                 {registros.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-4 text-center text-muted-foreground">
+                    <td colSpan={12} className="p-4 text-center text-muted-foreground">
                       Nenhum registro nesse filtro.
                     </td>
                   </tr>
