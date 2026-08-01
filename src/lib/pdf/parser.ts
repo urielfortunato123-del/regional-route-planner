@@ -352,6 +352,22 @@ function limpar(valor: string | undefined | null): string | null {
   return t.length ? t : null;
 }
 
+/**
+ * Período informado no nome do arquivo ou no texto ("27-07-26 a 31-07-26").
+ * Serve apenas para sinalizar datas fora da semana; nenhuma linha é descartada.
+ */
+function detectarPeriodoDeclarado(texto: string): { inicio: string | null; fim: string | null } {
+  const m = texto.match(
+    /(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\s*(?:a|à|ate|até|-|–)\s*(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/i,
+  );
+  if (!m) return { inicio: null, fim: null };
+  const inicio = parseData(`${m[1]}/${m[2]}/${m[3]}`);
+  const fim = parseData(`${m[4]}/${m[5]}/${m[6]}`);
+  return inicio && fim ? { inicio, fim } : { inicio: null, fim: null };
+}
+
+
+
 export async function lerProgramacaoPdf(
   arquivo: File,
   aoProgredir?: (mensagem: string, progresso: number) => void,
