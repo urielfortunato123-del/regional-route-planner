@@ -10,6 +10,7 @@ import { usePerfilLocal } from "@/lib/perfil-local";
 import { lerProgramacaoPdf, type ResultadoLeitura } from "@/lib/pdf/parser";
 import { rotuloRegional } from "@/lib/regionais";
 import { criarImportacao, verificarHashImportacao } from "@/lib/importacoes.functions";
+import { validarLeitura } from "@/lib/pdf/validacao-referencia";
 
 export const Route = createFileRoute("/programacao/importar")({
   head: () => ({
@@ -237,7 +238,38 @@ function ImportarPagina() {
                 <dt className="text-muted-foreground">Sem regional</dt>
                 <dd className="font-medium">{semRegional}</dd>
               </div>
+              <div>
+                <dt className="text-muted-foreground">Data fora do período</dt>
+                <dd className="font-medium">{datasDivergentes}</dd>
+              </div>
             </dl>
+
+            {datasDivergentes > 0 ? (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                {datasDivergentes} linha(s) com data fora do período{" "}
+                {resultado.periodo.inicio
+                  ? `${resultado.periodo.inicio} a ${resultado.periodo.fim}`
+                  : "declarado"}
+                . Nada foi descartado: essas linhas entram como
+                <strong> DATA_FORA_DO_PERIODO_CONFERIR</strong> para você conferir.
+              </p>
+            ) : null}
+
+            {validacao ? (
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Validação da leitura{validacao.aplicavel ? " (arquivo de referência)" : ""}
+                </p>
+                <ul className="mt-1 space-y-1 text-xs">
+                  {validacao.itens.map((item) => (
+                    <li key={item.titulo} className={item.ok ? "" : "text-destructive"}>
+                      {item.ok ? "✓" : "✗"} {item.titulo}: esperado {item.esperado}, encontrado{" "}
+                      {item.encontrado}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
