@@ -163,10 +163,10 @@ export function AppShell({
   }, [perfil.regional_codigo]);
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="sticky top-0 z-20 border-b border-border bg-primary text-primary-foreground">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
+      <header className="sticky top-0 z-[1000] w-full shrink-0 border-b border-border bg-primary text-primary-foreground shadow-[var(--shadow-card)]">
         <div className="faixa-rodoviaria h-1 w-full" />
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <p className="truncate text-[11px] font-semibold uppercase tracking-widest opacity-80">
               {perfil.regional_rotulo}
@@ -183,9 +183,11 @@ export function AppShell({
         <IndicadorConexao regional={perfil.regional_codigo} />
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-4">{children}</main>
+      <main className="mx-auto box-border w-full max-w-3xl flex-1 px-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-4">
+        {children}
+      </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-[1100] border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
         <div className="mx-auto flex max-w-3xl">
           {itensMenu.map((item) => {
               const ativo =
@@ -209,4 +211,5 @@ export function AppShell({
       </nav>
     </div>
   );
+
 }

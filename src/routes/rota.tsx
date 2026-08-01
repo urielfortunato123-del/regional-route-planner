@@ -595,30 +595,76 @@ function RotaPagina() {
       ]
     : [];
 
+  const posicionados = servicos.filter((s) => s.lat != null).length;
+  const semPosicao = servicos.length - posicionados;
+  const etapas = [
+    { rotulo: "PDF importado", ok: registros.length > 0 },
+    { rotulo: "Serviços confirmados", ok: registros.length > 0 },
+    { rotulo: "Serviços posicionados", ok: servicos.length > 0 && posicionados > 0 },
+    { rotulo: "Ponto inicial definido", ok: !!partida },
+    { rotulo: "Rota pronta", ok: !!partida && ordem.length > 0 },
+  ];
+
   return (
     <AppShell perfil={perfil} titulo="Rota do dia">
       <div className="space-y-4">
         <Cartao className="space-y-3">
-          <div className="flex gap-2">
-            <select
-              className={estiloEntrada}
-              value={visao}
-              onChange={(e) => setVisao(e.target.value as typeof visao)}
-            >
-              <option value="hoje">Serviços de hoje</option>
-              <option value="amanha">Serviços de amanhã</option>
-              <option value="semana">Próximos 7 dias</option>
-              <option value="dia">Dia escolhido</option>
-            </select>
-            <Botao onClick={() => void localizarServicos()} disabled={localizando}>
-              <MapPin className="size-4" />
-              {localizando ? `${progresso}%` : "Posicionar"}
-            </Botao>
-          </div>
+          <select
+            className={estiloEntrada}
+            value={visao}
+            onChange={(e) => setVisao(e.target.value as typeof visao)}
+          >
+            <option value="hoje">Serviços de hoje</option>
+            <option value="amanha">Serviços de amanhã</option>
+            <option value="semana">Próximos 7 dias</option>
+            <option value="dia">Dia escolhido</option>
+          </select>
+
+          <Botao
+            className="w-full"
+            onClick={() => void localizarServicos()}
+            disabled={localizando || registros.length === 0}
+          >
+            <MapPin className="size-4" />
+            {localizando ? `Posicionando serviços… ${progresso}%` : "Posicionar serviços"}
+          </Botao>
+
+          {localizando ? (
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${progresso}%` }}
+              />
+            </div>
+          ) : null}
+
+          {servicos.length ? (
+            <p className="text-xs text-muted-foreground">
+              {posicionados} de {servicos.length} serviço(s) localizados (
+              {Math.round((posicionados / servicos.length) * 100)}%)
+              {semPosicao ? ` · ${semPosicao} continuam sem posição` : ""}.
+            </p>
+          ) : null}
+
+          <ul className="grid gap-1 text-xs">
+            {etapas.map((e) => (
+              <li
+                key={e.rotulo}
+                className={`flex items-center gap-2 rounded-md px-2 py-1 font-semibold ${
+                  e.ok ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <span>{e.ok ? "✔" : "○"}</span>
+                {e.rotulo}
+              </li>
+            ))}
+          </ul>
+
           <p className="text-xs text-muted-foreground">
             Só entram na rota serviços da {perfil.regional_rotulo} com regional confirmada e posição
             válida na malha oficial do DER-SP.
           </p>
+
 
           <div className="space-y-1">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -854,7 +900,9 @@ function RotaPagina() {
           </>
         ) : (
           <Cartao className="text-center text-sm text-muted-foreground">
-            Toque em “Posicionar” para localizar os serviços da programação na malha do DER-SP.
+            Toque em “Posicionar serviços”, no cartão acima, para localizar a programação na
+            malha oficial do DER-SP e liberar a geração da rota.
+
           </Cartao>
         )}
 
