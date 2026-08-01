@@ -39,12 +39,30 @@ export type RegistroAuditoria = {
   atualizado_em: string | null;
 };
 
+export type ImportacaoAuditoria = {
+  id: string;
+  nome_arquivo: string;
+  hash_arquivo: string;
+  versao: number;
+  programacao_versao: number;
+  status: string;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  criado_em: string;
+  confirmado_em: string | null;
+  ultima_validacao_em: string | null;
+  total_paginas: number | null;
+  total_registros: number;
+  total_erros: number;
+  total_duplicados: number;
+};
+
 export type Auditoria = Awaited<ReturnType<typeof auditar>>;
 
 export async function auditar(funcionarioId: string, importacaoId: string | null) {
   const perfil = await carregarPerfil(funcionarioId);
 
-  let importacao: Record<string, unknown> | null = null;
+  let importacao: ImportacaoAuditoria | null = null;
   if (importacaoId) {
     const { data, error } = await supabaseAdmin
       .from("importacoes_pdf")
@@ -52,7 +70,26 @@ export async function auditar(funcionarioId: string, importacaoId: string | null
       .eq("id", importacaoId)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    importacao = data as Record<string, unknown> | null;
+    importacao = data
+      ? {
+          id: data.id,
+          nome_arquivo: data.nome_arquivo,
+          hash_arquivo: data.hash_arquivo,
+          versao: data.versao,
+          programacao_versao: (data as { programacao_versao?: number }).programacao_versao ?? data.versao,
+          status: data.status,
+          periodo_inicio: data.periodo_inicio,
+          periodo_fim: data.periodo_fim,
+          criado_em: data.criado_em,
+          confirmado_em: data.confirmado_em,
+          ultima_validacao_em:
+            (data as { ultima_validacao_em?: string | null }).ultima_validacao_em ?? null,
+          total_paginas: data.total_paginas,
+          total_registros: data.total_registros,
+          total_erros: data.total_erros,
+          total_duplicados: data.total_duplicados,
+        }
+      : null;
   }
 
   // ---- linhas em conferência (staging) ----
@@ -186,8 +223,8 @@ export async function auditar(funcionarioId: string, importacaoId: string | null
     perfil,
     importacao,
     etapas: {
-      paginasPdf: Number(importacao?.["total_paginas"] ?? 0),
-      linhasBrutas: Number(importacao?.["total_registros"] ?? staging.length),
+      paginasPdf: importacao?.total_paginas ?? 0,
+      linhasBrutas: importacao?.total_registros ?? staging.length,
       linhasReconhecidas: staging.length || todos.length,
       linhasConferencia: emConferencia.length,
       linhasRejeitadas: rejeitadas.length,
