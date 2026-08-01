@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  ClipboardCheck,
   Crosshair,
   Layers,
   Database,
+  ShieldAlert,
   Locate,
   MapPin,
   Navigation,
@@ -27,6 +29,16 @@ import type {
 } from "@/components/mapa/MapaLeaflet";
 import { usePerfilLocal } from "@/lib/perfil-local";
 import { listarProgramacoes } from "@/lib/programacao.functions";
+import { listarInspecoes, listarOcorrencias } from "@/lib/campo.functions";
+import { FormularioCampo, type ContextoCampo } from "@/components/campo/FormularioCampo";
+import { guardarRegistrosCampo } from "@/lib/offline/db";
+import {
+  acessosDoTrecho,
+  gerarRotaInteligente,
+  type PontoAcesso,
+  type RotaCalculada,
+  type TrechoProgramado,
+} from "@/lib/rotas/inteligente";
 import { distanciaMetros } from "@/lib/der/geo";
 import {
   carregarCamadasDer,
@@ -79,12 +91,13 @@ const CORES_STATUS: Record<string, string> = {
   concluido: "#16a34a",
 };
 
-type ServicoLocalizado = {
-  id: string;
-  rotulo: string;
-  detalhe: string;
-  status: string;
-  trecho: TrechoLocalizado;
+type ServicoLocalizado = TrechoProgramado;
+
+const CORES_OCORRENCIA: Record<string, string> = {
+  baixa: "#0891b2",
+  media: "#d97706",
+  alta: "#dc2626",
+  emergencial: "#7f1d1d",
 };
 
 function usePosicao() {
@@ -140,7 +153,19 @@ function MapaPagina() {
   const [localizando, setLocalizando] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [selecionados, setSelecionados] = useState<string[]>([]);
-  const [rota, setRota] = useState<ServicoLocalizado[] | null>(null);
+  const [rota, setRota] = useState<RotaCalculada | null>(null);
+  const [gerandoRota, setGerandoRota] = useState(false);
+  const [acessos, setAcessos] = useState<Record<string, PontoAcesso>>({});
+  const [servicoAberto, setServicoAberto] = useState<string | null>(null);
+  const [formulario, setFormulario] = useState<{
+    tipo: "inspecao" | "ocorrencia";
+    contexto: ContextoCampo;
+  } | null>(null);
+  const [verTrechos, setVerTrechos] = useState(true);
+  const [verConcluidos, setVerConcluidos] = useState(true);
+  const [verInspecoes, setVerInspecoes] = useState(true);
+  const [verOcorrencias, setVerOcorrencias] = useState(true);
+  const [verRota, setVerRota] = useState(true);
   const [contingencia, setContingencia] = useState(false);
   const [pontoClicado, setPontoClicado] = useState<{
     lat: number;
@@ -162,6 +187,7 @@ function MapaPagina() {
   >([]);
 
   const { posicao, seguindo, iniciar, parar } = usePosicao();
+  const cliente = useQueryClient();
 
   useEffect(() => {
     const cancelar = observarContingencia(setContingencia);
@@ -235,6 +261,44 @@ function MapaPagina() {
 
   const registros = programacao.data?.registros ?? [];
 
+  const inspecoes = useQuery({
+    queryKey: ["inspecoes", perfil?.id],
+    enabled: Boolean(perfil?.id),
+    queryFn: () => listarInspecoes({ data: { funcionarioId: perfil!.id } }),
+  });
+
+  const ocorrencias = useQuery({
+    queryKey: ["ocorrencias", perfil?.id],
+    enabled: Boolean(perfil?.id),
+    queryFn: () => listarOcorrencias({ data: { funcionarioId: perfil!.id } }),
+  });
+
+  // guarda os registros de campo no aparelho para consulta offline
+  useEffect(() => {
+    if (!perfil) return;
+    if (inspecoes.data?.inspecoes?.length) {
+      void guardarRegistrosCampo(
+        perfil.regional_codigo,
+        "inspecao",
+        inspecoes.data.inspecoes as unknown as Array<Record<string, unknown>>,
+      );
+    }
+    if (ocorrencias.data?.ocorrencias?.length) {
+      void guardarRegistrosCampo(
+        perfil.regional_codigo,
+        "ocorrencia",
+        ocorrencias.data.ocorrencias as unknown as Array<Record<string, unknown>>,
+      );
+    }
+  }, [perfil, inspecoes.data, ocorrencias.data]);
+
+  const listaInspecoes = (inspecoes.data?.inspecoes ?? []) as unknown as Array<
+    Record<string, string | number | null>
+  >;
+  const listaOcorrencias = (ocorrencias.data?.ocorrencias ?? []) as unknown as Array<
+    Record<string, string | number | boolean | null>
+  >;
+
   const localizarProgramacao = useCallback(async () => {
     if (registros.length === 0) {
       toast.info("Nenhum serviço nesta visão para localizar.");
@@ -256,6 +320,8 @@ function MapaPagina() {
           rotulo: `${campo("rodovia")} • km ${String(campo("km_inicial") ?? "—").replace(".", ",")}`,
           detalhe: [campo("atividade"), campo("equipe"), campo("descricao")].filter(Boolean).join(" — ").slice(0, 180),
           status: String(campo("status") ?? "pendente"),
+          regionalCodigo: campo("regional_codigo") ? String(campo("regional_codigo")) : null,
+          regionalConfirmada: Boolean(campo("regional_confirmada")),
           trecho,
         });
       } else {
@@ -336,48 +402,163 @@ function MapaPagina() {
     );
   }
 
-  function gerarRota() {
+  /**
+   * Rota inteligente: parte da posição atual (GPS), escolhe o ponto de acesso
+   * de cada trecho e mede o percurso pela malha viária (OSRM). Só entram
+   * serviços da regional do funcionário.
+   */
+  async function gerarRota() {
+    if (!perfil) return;
     const base = servicos.filter((s) => selecionados.includes(s.id));
-    const alvo = base.length > 0 ? base : servicos;
-    if (alvo.length < 2) {
-      toast.error("Selecione ao menos dois serviços localizados no mapa.");
+    const alvo = (base.length > 0 ? base : servicos).filter(
+      (s) => s.regionalCodigo === perfil.regional_codigo,
+    );
+    if (alvo.length < 1) {
+      toast.error("Selecione ao menos um serviço posicionado da sua regional.");
       return;
     }
-    const restantes = [...alvo];
-    const ordenada: ServicoLocalizado[] = [];
-    let atual = posicao ?? { lat: restantes[0]!.trecho.inicio.lat, lon: restantes[0]!.trecho.inicio.lon };
-    while (restantes.length) {
-      let melhor = 0;
-      let melhorDist = Number.POSITIVE_INFINITY;
-      restantes.forEach((s, i) => {
-        const d = distanciaMetros(atual, { lat: s.trecho.inicio.lat, lon: s.trecho.inicio.lon });
-        if (d < melhorDist) {
-          melhorDist = d;
-          melhor = i;
-        }
+    const origem = posicao ?? {
+      lat: alvo[0]!.trecho.inicio.lat,
+      lon: alvo[0]!.trecho.inicio.lon,
+    };
+    setGerandoRota(true);
+    try {
+      const calculada = await gerarRotaInteligente({
+        itens: alvo,
+        origem: { lat: origem.lat, lon: origem.lon },
+        acessosFixos: Object.fromEntries(
+          Object.entries(acessos).map(([id, a]) => [
+            id,
+            { itemId: id, tipo: a.tipo, lat: a.lat, lon: a.lon, km: a.km, rotulo: a.rotulo },
+          ]),
+        ),
+        otimizarOrdem: true,
       });
-      const escolhido = restantes.splice(melhor, 1)[0]!;
-      ordenada.push(escolhido);
-      atual = { lat: escolhido.trecho.fim.lat, lon: escolhido.trecho.fim.lon };
+      setRota(calculada);
+      toast.success(
+        calculada.pelaEstrada
+          ? `Rota sugerida: ${calculada.paradas.length} trecho(s), ${calculada.distanciaTotalKm.toFixed(1)} km pela estrada.`
+          : `Rota sugerida com distância aproximada — ${calculada.motivo ?? "serviço de rotas indisponível"}.`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível gerar a rota.");
+    } finally {
+      setGerandoRota(false);
     }
-    setRota(ordenada);
-    toast.success(`Roteiro sugerido com ${ordenada.length} paradas.`);
   }
 
-  const marcadores = useMemo<MarcadorMapa[]>(() => {
-    const lista: MarcadorMapa[] = servicos.map((s) => {
-      const ordem = rota?.findIndex((r) => r.id === s.id) ?? -1;
-      return {
-        id: s.id,
-        lat: s.trecho.inicio.lat,
-        lon: s.trecho.inicio.lon,
-        rotulo: s.rotulo,
-        detalhe: s.detalhe,
-        cor: CORES_STATUS[s.status] ?? "#dc2626",
-        ...(ordem >= 0 ? { numero: ordem + 1 } : {}),
-        destacado: selecionados.includes(s.id),
-      };
+  function escolherAcesso(item: ServicoLocalizado, acesso: PontoAcesso) {
+    setAcessos((a) => ({ ...a, [item.id]: acesso }));
+    setFoco({ lat: acesso.lat, lon: acesso.lon, zoom: 16, chave: `acesso-${item.id}-${Date.now()}` });
+    toast.success(`Acesso definido: ${acesso.rotulo}`);
+  }
+
+  function abrirFormulario(tipo: "inspecao" | "ocorrencia", item?: ServicoLocalizado) {
+    const acesso = item ? acessos[item.id] : null;
+    const ponto = item
+      ? (acesso ?? { lat: item.trecho.inicio.lat, lon: item.trecho.inicio.lon })
+      : (pontoClicado ?? posicao);
+    if (!ponto) {
+      toast.error("Toque em um ponto do mapa ou ative o GPS para registrar.");
+      return;
+    }
+    setFormulario({
+      tipo,
+      contexto: {
+        programacaoId: item?.id ?? null,
+        rodovia: item?.trecho.rodoviaSolicitada ?? rodoviaDer?.rodovia.codigo ?? null,
+        kmInicial: item?.trecho.kmInicial ?? rodoviaDer?.km ?? marcoDer?.km ?? null,
+        kmFinal: item?.trecho.kmFinal ?? null,
+        atividade: item?.detalhe.split(" — ")[0] ?? null,
+        equipe: null,
+        contrato: null,
+        lat: ponto.lat,
+        lon: ponto.lon,
+        rotulo: item
+          ? item.rotulo
+          : `Ponto ${ponto.lat.toFixed(5)}, ${ponto.lon.toFixed(5)}`,
+      },
     });
+  }
+
+  const servicosVisiveis = useMemo(
+    () => servicos.filter((s) => verConcluidos || s.status !== "concluido"),
+    [servicos, verConcluidos],
+  );
+
+  const marcadores = useMemo<MarcadorMapa[]>(() => {
+    const lista: MarcadorMapa[] = [];
+
+    if (verTrechos) {
+      for (const s of servicosVisiveis) {
+        const ordem = rota?.paradas.find((p) => p.item.id === s.id)?.ordem ?? -1;
+        const cor = CORES_STATUS[s.status] ?? "#dc2626";
+        lista.push({
+          id: s.id,
+          lat: s.trecho.inicio.lat,
+          lon: s.trecho.inicio.lon,
+          rotulo: `${s.rotulo} — início`,
+          detalhe: s.detalhe,
+          cor,
+          ...(ordem > 0 ? { numero: ordem } : {}),
+          destacado: selecionados.includes(s.id),
+        });
+        if (
+          Math.abs(s.trecho.kmFinal - s.trecho.kmInicial) > 0.001 &&
+          (s.trecho.fim.lat !== s.trecho.inicio.lat || s.trecho.fim.lon !== s.trecho.inicio.lon)
+        ) {
+          lista.push({
+            id: `${s.id}-fim`,
+            lat: s.trecho.fim.lat,
+            lon: s.trecho.fim.lon,
+            rotulo: `${s.trecho.rodovia} km ${s.trecho.kmFinal.toFixed(3).replace(".", ",")} — fim`,
+            detalhe: s.detalhe,
+            cor,
+          });
+        }
+        const acesso = acessos[s.id];
+        if (acesso) {
+          lista.push({
+            id: `${s.id}-acesso`,
+            lat: acesso.lat,
+            lon: acesso.lon,
+            rotulo: `Acesso — ${s.rotulo}`,
+            detalhe: acesso.rotulo,
+            cor: "#0f766e",
+            destacado: true,
+          });
+        }
+      }
+    }
+
+    if (verInspecoes) {
+      for (const i of listaInspecoes) {
+        if (typeof i["latitude"] !== "number" || typeof i["longitude"] !== "number") continue;
+        lista.push({
+          id: `insp-${i["id"]}`,
+          lat: Number(i["latitude"]),
+          lon: Number(i["longitude"]),
+          rotulo: `Inspeção — ${i["rodovia"] ?? "sem rodovia"}`,
+          detalhe: `${i["condicao"] ?? ""} ${i["servico_executado"] ?? ""}`.trim(),
+          cor: "#7c3aed",
+        });
+      }
+    }
+
+    if (verOcorrencias) {
+      for (const o of listaOcorrencias) {
+        if (typeof o["latitude"] !== "number" || typeof o["longitude"] !== "number") continue;
+        lista.push({
+          id: `ocor-${o["id"]}`,
+          lat: Number(o["latitude"]),
+          lon: Number(o["longitude"]),
+          rotulo: `${o["tipo"]} — ${o["rodovia"] ?? "sem rodovia"}`,
+          detalhe: String(o["descricao"] ?? ""),
+          cor: CORES_OCORRENCIA[String(o["prioridade"] ?? "media")] ?? "#d97706",
+        });
+      }
+    }
+
     if (resultadoBusca) {
       lista.push({
         id: "busca",
@@ -400,29 +581,46 @@ function MapaPagina() {
       });
     }
     return lista;
-  }, [servicos, rota, selecionados, resultadoBusca, pontoClicado]);
+  }, [
+    servicosVisiveis,
+    rota,
+    selecionados,
+    acessos,
+    verTrechos,
+    verInspecoes,
+    verOcorrencias,
+    listaInspecoes,
+    listaOcorrencias,
+    resultadoBusca,
+    pontoClicado,
+  ]);
 
   const linhas = useMemo<LinhaMapa[]>(() => {
-    const saida: LinhaMapa[] = servicos
-      .filter((s) => s.trecho.linha.length > 1)
-      .map((s) => ({
-        id: `t-${s.id}`,
-        pontos: s.trecho.linha,
-        cor: CORES_STATUS[s.status] ?? "#dc2626",
-      }));
+    const saida: LinhaMapa[] = [];
+    if (verTrechos) {
+      for (const s of servicosVisiveis) {
+        if (s.trecho.linha.length > 1) {
+          saida.push({
+            id: `t-${s.id}`,
+            pontos: s.trecho.linha,
+            cor: CORES_STATUS[s.status] ?? "#dc2626",
+          });
+        }
+      }
+    }
     if (resultadoBusca && resultadoBusca.linha.length > 1) {
       saida.push({ id: "t-busca", pontos: resultadoBusca.linha, cor: "#7c3aed" });
     }
-    if (rota && rota.length > 1) {
+    if (verRota && rota && rota.geometria.length > 1) {
       saida.push({
         id: "rota",
-        pontos: rota.map((r) => ({ lat: r.trecho.inicio.lat, lon: r.trecho.inicio.lon })),
+        pontos: rota.geometria,
         cor: "#0ea5e9",
-        tracejada: true,
+        tracejada: !rota.pelaEstrada,
       });
     }
     return saida;
-  }, [servicos, resultadoBusca, rota]);
+  }, [servicosVisiveis, resultadoBusca, rota, verTrechos, verRota]);
 
   const camadasIndisponiveis =
     Boolean(areaConsulta) && !camadas.isLoading && (camadas.isError || camadas.data == null);
@@ -554,6 +752,23 @@ function MapaPagina() {
               { on: verMalha, set: setVerMalha, texto: "Malha rodoviária DER" },
               { on: verMarcos, set: setVerMarcos, texto: "Marcos quilométricos DER" },
               { on: verLimite, set: setVerLimite, texto: "Limite da regional DER" },
+              {
+                on: verTrechos,
+                set: setVerTrechos,
+                texto: `Trechos programados (${servicos.length})`,
+              },
+              { on: verConcluidos, set: setVerConcluidos, texto: "Serviços concluídos" },
+              {
+                on: verInspecoes,
+                set: setVerInspecoes,
+                texto: `Inspeções (${listaInspecoes.length})`,
+              },
+              {
+                on: verOcorrencias,
+                set: setVerOcorrencias,
+                texto: `Ocorrências (${listaOcorrencias.length})`,
+              },
+              { on: verRota, set: setVerRota, texto: "Rota sugerida" },
             ].map((c) => (
               <button
                 key={c.texto}
@@ -575,6 +790,27 @@ function MapaPagina() {
               Aproxime o mapa (zoom 12 ou mais) para exibir os marcos quilométricos oficiais.
             </p>
           ) : null}
+          <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+            {[
+              { cor: CORES_STATUS["pendente"]!, texto: "serviço pendente" },
+              { cor: CORES_STATUS["em_rota"]!, texto: "em rota" },
+              { cor: CORES_STATUS["concluido"]!, texto: "concluído" },
+              { cor: "#0f766e", texto: "ponto de acesso" },
+              { cor: "#7c3aed", texto: "inspeção" },
+              { cor: "#dc2626", texto: "ocorrência (por prioridade)" },
+            ].map((l) => (
+              <span key={l.texto} className="flex items-center gap-1">
+                <span
+                  className="inline-block size-2.5 rounded-full"
+                  style={{ backgroundColor: l.cor }}
+                />
+                {l.texto}
+              </span>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Todas as camadas mostram apenas dados da regional {perfil.regional_rotulo}.
+          </p>
         </Cartao>
 
         <Cartao className="p-0">
@@ -816,10 +1052,18 @@ function MapaPagina() {
         ) : null}
 
         {pontoClicado ? (
-          <Cartao className="text-sm">
+          <Cartao className="space-y-2 text-sm">
             <p className="font-semibold">Ponto consultado</p>
             <p className="text-muted-foreground">{pontoClicado.texto}</p>
             <p className="text-muted-foreground">{textoCoordenadas(pontoClicado)}</p>
+            <div className="flex flex-wrap gap-2">
+              <Botao variante="contorno" onClick={() => abrirFormulario("inspecao")}>
+                <ClipboardCheck className="size-4" /> Nova inspeção
+              </Botao>
+              <Botao variante="contorno" onClick={() => abrirFormulario("ocorrencia")}>
+                <ShieldAlert className="size-4" /> Nova ocorrência
+              </Botao>
+            </div>
           </Cartao>
         ) : null}
 
@@ -849,9 +1093,13 @@ function MapaPagina() {
               <RefreshCw className={`size-4 ${localizando ? "animate-spin" : ""}`} />
               {localizando ? `Localizando… ${progresso}%` : "Posicionar no mapa"}
             </Botao>
-            <Botao variante="destaque" onClick={gerarRota} disabled={servicos.length < 2}>
+            <Botao
+              variante="destaque"
+              onClick={() => void gerarRota()}
+              disabled={servicos.length < 1 || gerandoRota}
+            >
               <RotaIcone className="size-4" />
-              Gerar roteiro
+              {gerandoRota ? "Calculando pela estrada…" : "Gerar rota sugerida"}
             </Botao>
           </div>
 
@@ -863,57 +1111,163 @@ function MapaPagina() {
           ) : null}
 
           <ul className="divide-y divide-border">
-            {servicos.map((s) => (
-              <li key={s.id} className="flex items-start gap-3 py-2">
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4"
-                  checked={selecionados.includes(s.id)}
-                  onChange={() => alternarSelecao(s.id)}
-                />
-                <button
-                  className="flex-1 text-left"
-                  onClick={() =>
-                    setFoco({
-                      lat: s.trecho.inicio.lat,
-                      lon: s.trecho.inicio.lon,
-                      zoom: 15,
-                      chave: `s-${s.id}-${Date.now()}`,
-                    })
-                  }
-                >
-                  <p className="text-sm font-semibold">{s.rotulo}</p>
-                  <p className="text-xs text-muted-foreground">{s.detalhe || "—"}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {textoCoordenadas(s.trecho.inicio)} • referência {s.trecho.precisao}
-                  </p>
-                </button>
-                <a
-                  href={linkGoogleMaps(s.trecho.inicio)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 text-primary"
-                  aria-label={`Navegar até ${s.rotulo}`}
-                >
-                  <Navigation className="size-4" />
-                </a>
-              </li>
-            ))}
+            {servicosVisiveis.map((s) => {
+              const aberto = servicoAberto === s.id;
+              const acesso = acessos[s.id];
+              const daRegional = s.regionalCodigo === perfil.regional_codigo;
+              return (
+                <li key={s.id} className="py-2">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4"
+                      aria-label={`Selecionar ${s.rotulo}`}
+                      checked={selecionados.includes(s.id)}
+                      disabled={!daRegional}
+                      onChange={() => alternarSelecao(s.id)}
+                    />
+                    <button
+                      className="flex-1 text-left"
+                      onClick={() => {
+                        setServicoAberto(aberto ? null : s.id);
+                        setFoco({
+                          lat: s.trecho.inicio.lat,
+                          lon: s.trecho.inicio.lon,
+                          zoom: 15,
+                          chave: `s-${s.id}-${Date.now()}`,
+                        });
+                      }}
+                    >
+                      <p className="text-sm font-semibold">{s.rotulo}</p>
+                      <p className="text-xs text-muted-foreground">{s.detalhe || "—"}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {s.trecho.rodovia} · km {s.trecho.kmInicial.toFixed(3).replace(".", ",")} a{" "}
+                        {s.trecho.kmFinal.toFixed(3).replace(".", ",")} ·{" "}
+                        {s.trecho.extensaoKm.toFixed(2).replace(".", ",")} km · referência{" "}
+                        {s.trecho.precisao}
+                      </p>
+                      {acesso ? (
+                        <p className="text-[11px] font-semibold text-primary">
+                          acesso: {acesso.rotulo}
+                        </p>
+                      ) : null}
+                      {!daRegional ? (
+                        <Etiqueta tom="erro">Fora da sua regional — bloqueado</Etiqueta>
+                      ) : null}
+                    </button>
+                    <a
+                      href={linkGoogleMaps(acesso ?? s.trecho.inicio)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 text-primary"
+                      aria-label={`Navegar até ${s.rotulo}`}
+                    >
+                      <Navigation className="size-4" />
+                    </a>
+                  </div>
+
+                  {aberto && daRegional ? (
+                    <div className="mt-2 space-y-2 rounded-lg border border-border bg-surface p-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Ponto de acesso ao trecho
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {acessosDoTrecho(s, posicao ?? null).map((a) => (
+                          <button
+                            key={a.tipo}
+                            onClick={() => escolherAcesso(s, a)}
+                            className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${
+                              acesso?.tipo === a.tipo
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background"
+                            }`}
+                          >
+                            {a.tipo === "inicio"
+                              ? "Início do trecho"
+                              : a.tipo === "fim"
+                                ? "Fim do trecho"
+                                : "Mais próximo de mim"}
+                          </button>
+                        ))}
+                        {pontoClicado ? (
+                          <button
+                            onClick={() =>
+                              escolherAcesso(s, {
+                                tipo: "manual",
+                                rotulo: `Acesso escolhido no mapa (${textoCoordenadas(pontoClicado)})`,
+                                lat: pontoClicado.lat,
+                                lon: pontoClicado.lon,
+                                km: null,
+                              })
+                            }
+                            className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold"
+                          >
+                            Usar ponto marcado no mapa
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Botao variante="contorno" onClick={() => abrirFormulario("inspecao", s)}>
+                          <ClipboardCheck className="size-4" /> Inspeção
+                        </Botao>
+                        <Botao variante="contorno" onClick={() => abrirFormulario("ocorrencia", s)}>
+                          <ShieldAlert className="size-4" /> Ocorrência
+                        </Botao>
+                        <a
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-2 text-xs font-semibold text-primary"
+                          href={linkWaze(acesso ?? s.trecho.inicio)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Waze
+                        </a>
+                      </div>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </Cartao>
 
         {rota ? (
           <Cartao className="space-y-2">
-            <h2 className="font-display text-base font-semibold">Roteiro sugerido</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-display text-base font-semibold">Conferência da rota</h2>
+              <Etiqueta tom={rota.pelaEstrada ? "ok" : "alerta"}>
+                {rota.pelaEstrada ? "distância pela estrada" : "distância aproximada"}
+              </Etiqueta>
+              <Etiqueta tom="neutro">{rota.distanciaTotalKm.toFixed(1)} km</Etiqueta>
+              <Etiqueta tom="neutro">
+                {Math.floor(rota.tempoTotalMin / 60)}h
+                {String(Math.round(rota.tempoTotalMin % 60)).padStart(2, "0")}
+              </Etiqueta>
+              <Etiqueta tom="neutro">{rota.paradas.length} trecho(s)</Etiqueta>
+            </div>
+            {rota.motivo ? (
+              <p className="rounded-md bg-warning/15 px-3 py-2 text-xs text-warning-foreground">
+                {rota.motivo}
+              </p>
+            ) : null}
             <ol className="space-y-2">
-              {rota.map((s, i) => (
-                <li key={s.id} className="flex items-center gap-3 text-sm">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                    {i + 1}
+              {rota.paradas.map((parada) => (
+                <li key={parada.item.id} className="flex items-start gap-3 text-sm">
+                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    {parada.ordem}
                   </span>
-                  <span className="flex-1">{s.rotulo}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{parada.item.rotulo}</p>
+                    <p className="text-xs text-muted-foreground">{parada.acesso.rotulo}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {parada.distanciaKm != null
+                        ? `${parada.distanciaKm.toFixed(1).replace(".", ",")} km`
+                        : "—"}
+                      {parada.tempoMin != null ? ` · ${Math.round(parada.tempoMin)} min` : ""} até o
+                      acesso
+                    </p>
+                  </div>
                   <a
-                    href={linkWaze(s.trecho.inicio)}
+                    href={linkWaze(parada.acesso)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs font-semibold text-primary"
@@ -924,11 +1278,106 @@ function MapaPagina() {
               ))}
             </ol>
             <p className="text-xs text-muted-foreground">
-              Ordem por proximidade a partir da sua posição atual (ou do primeiro serviço, se o GPS
-              estiver desligado). Você pode selecionar apenas alguns serviços e gerar de novo.
+              Ordem por proximidade a partir da sua posição (ou do primeiro trecho, sem GPS). Para
+              trocar o ponto de entrada, abra o serviço na lista e escolha outro acesso — depois
+              gere a rota de novo.
             </p>
           </Cartao>
         ) : null}
+
+        <Cartao className="space-y-3">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="size-4 text-primary" />
+            <h2 className="font-display text-base font-semibold">
+              Inspeções e ocorrências da regional
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Botao variante="contorno" onClick={() => abrirFormulario("inspecao")}>
+              <ClipboardCheck className="size-4" /> Nova inspeção
+            </Botao>
+            <Botao variante="contorno" onClick={() => abrirFormulario("ocorrencia")}>
+              <ShieldAlert className="size-4" /> Nova ocorrência
+            </Botao>
+          </div>
+          {listaInspecoes.length === 0 && listaOcorrencias.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum registro de campo ainda. Toque em um trecho no mapa ou use os botões acima.
+            </p>
+          ) : null}
+          <ul className="divide-y divide-border">
+            {listaOcorrencias.slice(0, 12).map((o) => (
+              <li key={String(o["id"])} className="py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong>{String(o["tipo"])}</strong>
+                  <Etiqueta
+                    tom={
+                      o["prioridade"] === "emergencial" || o["prioridade"] === "alta"
+                        ? "erro"
+                        : "alerta"
+                    }
+                  >
+                    {String(o["prioridade"])}
+                  </Etiqueta>
+                  <Etiqueta tom="neutro">{String(o["situacao"])}</Etiqueta>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {String(o["rodovia"] ?? "sem rodovia")}
+                  {o["km"] != null ? ` km ${String(o["km"]).replace(".", ",")}` : ""} ·{" "}
+                  {String(o["descricao"] ?? "")}
+                </p>
+                {typeof o["latitude"] === "number" && typeof o["longitude"] === "number" ? (
+                  <button
+                    className="text-xs font-semibold text-primary"
+                    onClick={() =>
+                      setFoco({
+                        lat: Number(o["latitude"]),
+                        lon: Number(o["longitude"]),
+                        zoom: 16,
+                        chave: `ocor-${o["id"]}-${Date.now()}`,
+                      })
+                    }
+                  >
+                    Ver no mapa
+                  </button>
+                ) : null}
+              </li>
+            ))}
+            {listaInspecoes.slice(0, 12).map((i) => (
+              <li key={String(i["id"])} className="py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong>Inspeção</strong>
+                  <Etiqueta tom={i["condicao"] === "adequada" ? "ok" : "alerta"}>
+                    {String(i["condicao"] ?? "—")}
+                  </Etiqueta>
+                  <Etiqueta tom="neutro">{String(i["situacao"])}</Etiqueta>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {String(i["rodovia"] ?? "sem rodovia")}
+                  {i["km_inicial"] != null
+                    ? ` km ${String(i["km_inicial"]).replace(".", ",")}`
+                    : ""}{" "}
+                  · {String(i["servico_executado"] ?? i["observacao"] ?? "")}
+                </p>
+                {typeof i["latitude"] === "number" && typeof i["longitude"] === "number" ? (
+                  <button
+                    className="text-xs font-semibold text-primary"
+                    onClick={() =>
+                      setFoco({
+                        lat: Number(i["latitude"]),
+                        lon: Number(i["longitude"]),
+                        zoom: 16,
+                        chave: `insp-${i["id"]}-${Date.now()}`,
+                      })
+                    }
+                  >
+                    Ver no mapa
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Cartao>
 
         <Cartao className="space-y-2 text-sm">
           <div className="flex items-center gap-2">
@@ -966,6 +1415,20 @@ function MapaPagina() {
           </div>
         </Cartao>
       </div>
+
+      {formulario ? (
+        <FormularioCampo
+          tipo={formulario.tipo}
+          contexto={formulario.contexto}
+          funcionarioId={perfil.id}
+          regionalCodigo={perfil.regional_codigo}
+          aoFechar={() => setFormulario(null)}
+          aoSalvar={() => {
+            cliente.invalidateQueries({ queryKey: ["inspecoes"] });
+            cliente.invalidateQueries({ queryKey: ["ocorrencias"] });
+          }}
+        />
+      ) : null}
     </AppShell>
   );
 }

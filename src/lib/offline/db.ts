@@ -56,10 +56,19 @@ export type ArquivoLocal = {
   criadoEm: number;
 };
 
+export type RegistroCampoLocal = {
+  id: string;
+  regional_codigo: string;
+  tipo: "inspecao" | "ocorrencia";
+  dados: Record<string, unknown>;
+  pendente: number; // 0 ou 1 (IndexedDB não indexa boolean)
+  criadoEm: number;
+};
+
 export type PendenciaLocal = {
   id?: number;
   regional_codigo: string;
-  tipo: "status" | "correcao" | "exclusao" | "rota" | "coordenadas";
+  tipo: "status" | "correcao" | "exclusao" | "rota" | "coordenadas" | "inspecao" | "ocorrencia";
   payload: Record<string, unknown>;
   descricao: string;
   criadoEm: number;
@@ -75,6 +84,7 @@ class BancoLocal extends Dexie {
   pendencias!: Table<PendenciaLocal, number>;
   importacoes!: Table<ImportacaoLocal, string>;
   arquivos!: Table<ArquivoLocal, string>;
+  campo!: Table<RegistroCampoLocal, string>;
 
   constructor() {
     super("programacao-regional");
@@ -88,6 +98,9 @@ class BancoLocal extends Dexie {
     this.version(2).stores({
       importacoes: "id, regional_codigo, atualizadoEm",
       arquivos: "id, regional_codigo, criadoEm",
+    });
+    this.version(3).stores({
+      campo: "id, regional_codigo, tipo, pendente, criadoEm",
     });
   }
 }
@@ -271,6 +284,55 @@ export async function lerPdfs(regional: string) {
   );
 }
 
+// ------------------------------------------------------------ inspeções e ocorrências
+
+export async function guardarRegistroCampoLocal(
+  regional: string,
+  tipo: "inspecao" | "ocorrencia",
+  registro: Record<string, unknown>,
+) {
+  const db = banco();
+  if (!db) return;
+  await db.campo.put({
+    id: String(registro["id"] ?? `local-${Date.now()}`),
+    regional_codigo: regional,
+    tipo,
+    dados: registro,
+    pendente: registro["pendente"] ? 1 : 0,
+    criadoEm: Date.now(),
+  });
+}
+
+export async function guardarRegistrosCampo(
+  regional: string,
+  tipo: "inspecao" | "ocorrencia",
+  registros: Array<Record<string, unknown>>,
+) {
+  const db = banco();
+  if (!db) return;
+  await db.campo.bulkPut(
+    registros
+      .filter((r) => typeof r["id"] === "string")
+      .map((r) => ({
+        id: String(r["id"]),
+        regional_codigo: regional,
+        tipo,
+        dados: r,
+        pendente: 0,
+        criadoEm: Date.now(),
+      })),
+  );
+}
+
+export async function lerRegistrosCampo(regional: string, tipo?: "inspecao" | "ocorrencia") {
+  const db = banco();
+  if (!db) return [];
+  const linhas = await db.campo.where("regional_codigo").equals(regional).toArray();
+  return linhas
+    .filter((l) => !tipo || l.tipo === tipo)
+    .sort((a, b) => b.criadoEm - a.criadoEm);
+}
+
 // ------------------------------------------------------------ troca de regional
 
 export type ResumoLocal = {
@@ -314,8 +376,18 @@ export async function limparRegional(regional: string) {
   if (!db) return;
   await db.transaction(
     "rw",
-    [db.programacoes, db.malha, db.rotas, db.fiscalizacao, db.pendencias, db.importacoes, db.arquivos],
+    [
+      db.programacoes,
+      db.malha,
+      db.rotas,
+      db.fiscalizacao,
+      db.pendencias,
+      db.importacoes,
+      db.arquivos,
+      db.campo,
+    ],
     async () => {
+      await db.campo.where("regional_codigo").equals(regional).delete();
       await db.importacoes.where("regional_codigo").equals(regional).delete();
       await db.arquivos.where("regional_codigo").equals(regional).delete();
       await db.programacoes.where("regional_codigo").equals(regional).delete();
@@ -331,7 +403,15 @@ export async function limparRegional(regional: string) {
 export async function limparOutrasRegionais(regionalAtual: string) {
   const db = banco();
   if (!db) return;
-  const tabelas = [db.programacoes, db.malha, db.rotas, db.fiscalizacao, db.importacoes, db.arquivos] as const;
+  const tabelas = [
+    db.programacoes,
+    db.malha,
+    db.rotas,
+    db.fiscalizacao,
+    db.importacoes,
+    db.arquivos,
+    db.campo,
+  ] as const;
   for (const tabela of tabelas) {
     const chaves = await tabela.toArray();
     const alvo = chaves.filter(

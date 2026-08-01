@@ -12,6 +12,8 @@ import {
   Navigation,
   Route as RouteIcon,
   Save,
+  ShieldAlert,
+  ClipboardCheck,
   Trash2,
   Wand2,
 } from "lucide-react";
@@ -33,6 +35,7 @@ import { enfileirar } from "@/lib/offline/sync";
 import { guardarPdf, guardarRotaLocal } from "@/lib/offline/db";
 import { gerarPdfRota, nomeArquivoRota, type ParadaPdf } from "@/lib/rotas/pdf";
 import { validarRota, textoDosProblemas, type ItemRota } from "@/lib/rotas/validacao";
+import { FormularioCampo, type ContextoCampo } from "@/components/campo/FormularioCampo";
 import { linkGoogleMaps, linkWaze, localizarTrecho } from "@/services/derMapService";
 
 const MapaLeaflet = lazy(() => import("@/components/mapa/MapaLeaflet"));
@@ -102,6 +105,36 @@ function RotaPagina() {
   const [partida, setPartida] = useState<{ rotulo: string; lat: number; lon: number } | null>(null);
   const [localizando, setLocalizando] = useState(false);
   const [progresso, setProgresso] = useState(0);
+  const [formulario, setFormulario] = useState<{
+    tipo: "inspecao" | "ocorrencia";
+    contexto: ContextoCampo;
+  } | null>(null);
+
+  function abrirRegistro(tipo: "inspecao" | "ocorrencia", servico: Servico) {
+    if (servico.lat == null || servico.lon == null) {
+      toast.error("Este serviço ainda não tem posição na malha do DER.");
+      return;
+    }
+    const bruto = servico.bruto;
+    const numero = (chave: string) =>
+      typeof bruto[chave] === "number" ? (bruto[chave] as number) : null;
+    const texto = (chave: string) => (bruto[chave] == null ? null : String(bruto[chave]));
+    setFormulario({
+      tipo,
+      contexto: {
+        programacaoId: servico.id,
+        rodovia: texto("rodovia"),
+        kmInicial: numero("km_inicial"),
+        kmFinal: numero("km_final"),
+        atividade: texto("atividade"),
+        equipe: texto("equipe"),
+        contrato: texto("contrato"),
+        lat: servico.lat,
+        lon: servico.lon,
+        rotulo: servico.rotulo,
+      },
+    });
+  }
 
   const programacao = useQuery({
     queryKey: ["programacoes", perfil?.id, "rota", visao, dia],
@@ -800,6 +833,18 @@ function RotaPagina() {
                         >
                           Waze
                         </a>
+                        <button
+                          className="rounded-md border border-border px-2 py-1 font-semibold"
+                          onClick={() => abrirRegistro("inspecao", s)}
+                        >
+                          <ClipboardCheck className="mr-1 inline size-3" /> Inspeção
+                        </button>
+                        <button
+                          className="rounded-md border border-border px-2 py-1 font-semibold"
+                          onClick={() => abrirRegistro("ocorrencia", s)}
+                        >
+                          <ShieldAlert className="mr-1 inline size-3" /> Ocorrência
+                        </button>
                       </div>
                     ) : null}
                   </Cartao>
@@ -853,6 +898,17 @@ function RotaPagina() {
           ))}
         </Cartao>
       </div>
+
+      {formulario ? (
+        <FormularioCampo
+          tipo={formulario.tipo}
+          contexto={formulario.contexto}
+          funcionarioId={perfil.id}
+          regionalCodigo={perfil.regional_codigo}
+          aoFechar={() => setFormulario(null)}
+          aoSalvar={() => cliente.invalidateQueries({ queryKey: ["inspecoes"] })}
+        />
+      ) : null}
     </AppShell>
   );
 }

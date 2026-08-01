@@ -339,6 +339,218 @@ export type Database = {
           },
         ]
       }
+      inspecoes: {
+        Row: {
+          atividade: string | null
+          atualizado_em: string
+          condicao: string | null
+          contrato: string | null
+          criado_em: string
+          equipe: string | null
+          fotos: Json
+          funcionario_id: string | null
+          funcionario_nome: string
+          id: string
+          km_final: number | null
+          km_inicial: number | null
+          latitude: number | null
+          longitude: number | null
+          nao_conformidade: string | null
+          observacao: string | null
+          programacao_id: string | null
+          regional_codigo: string
+          regional_id: string
+          registrada_em: string
+          rodovia: string | null
+          servico_executado: string | null
+          situacao: string
+        }
+        Insert: {
+          atividade?: string | null
+          atualizado_em?: string
+          condicao?: string | null
+          contrato?: string | null
+          criado_em?: string
+          equipe?: string | null
+          fotos?: Json
+          funcionario_id?: string | null
+          funcionario_nome: string
+          id?: string
+          km_final?: number | null
+          km_inicial?: number | null
+          latitude?: number | null
+          longitude?: number | null
+          nao_conformidade?: string | null
+          observacao?: string | null
+          programacao_id?: string | null
+          regional_codigo: string
+          regional_id: string
+          registrada_em?: string
+          rodovia?: string | null
+          servico_executado?: string | null
+          situacao?: string
+        }
+        Update: {
+          atividade?: string | null
+          atualizado_em?: string
+          condicao?: string | null
+          contrato?: string | null
+          criado_em?: string
+          equipe?: string | null
+          fotos?: Json
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          km_final?: number | null
+          km_inicial?: number | null
+          latitude?: number | null
+          longitude?: number | null
+          nao_conformidade?: string | null
+          observacao?: string | null
+          programacao_id?: string | null
+          regional_codigo?: string
+          regional_id?: string
+          registrada_em?: string
+          rodovia?: string | null
+          servico_executado?: string | null
+          situacao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspecoes_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspecoes_programacao_id_fkey"
+            columns: ["programacao_id"]
+            isOneToOne: false
+            referencedRelation: "programacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspecoes_regional_id_fkey"
+            columns: ["regional_id"]
+            isOneToOne: false
+            referencedRelation: "regionais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ocorrencias: {
+        Row: {
+          atualizado_em: string
+          contrato: string | null
+          criado_em: string
+          descricao: string
+          equipe: string | null
+          faixa: string | null
+          fotos: Json
+          funcionario_id: string | null
+          funcionario_nome: string
+          id: string
+          km: number | null
+          km_final: number | null
+          latitude: number | null
+          longitude: number | null
+          necessita_atendimento: boolean
+          observacao: string | null
+          prazo: string | null
+          prioridade: string
+          programacao_id: string | null
+          regional_codigo: string
+          regional_id: string
+          registrada_em: string
+          risco: string | null
+          rodovia: string | null
+          sentido: string | null
+          situacao: string
+          tipo: string
+        }
+        Insert: {
+          atualizado_em?: string
+          contrato?: string | null
+          criado_em?: string
+          descricao: string
+          equipe?: string | null
+          faixa?: string | null
+          fotos?: Json
+          funcionario_id?: string | null
+          funcionario_nome: string
+          id?: string
+          km?: number | null
+          km_final?: number | null
+          latitude?: number | null
+          longitude?: number | null
+          necessita_atendimento?: boolean
+          observacao?: string | null
+          prazo?: string | null
+          prioridade?: string
+          programacao_id?: string | null
+          regional_codigo: string
+          regional_id: string
+          registrada_em?: string
+          risco?: string | null
+          rodovia?: string | null
+          sentido?: string | null
+          situacao?: string
+          tipo: string
+        }
+        Update: {
+          atualizado_em?: string
+          contrato?: string | null
+          criado_em?: string
+          descricao?: string
+          equipe?: string | null
+          faixa?: string | null
+          fotos?: Json
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          km?: number | null
+          km_final?: number | null
+          latitude?: number | null
+          longitude?: number | null
+          necessita_atendimento?: boolean
+          observacao?: string | null
+          prazo?: string | null
+          prioridade?: string
+          programacao_id?: string | null
+          regional_codigo?: string
+          regional_id?: string
+          registrada_em?: string
+          risco?: string | null
+          rodovia?: string | null
+          sentido?: string | null
+          situacao?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocorrencias_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocorrencias_programacao_id_fkey"
+            columns: ["programacao_id"]
+            isOneToOne: false
+            referencedRelation: "programacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocorrencias_regional_id_fkey"
+            columns: ["regional_id"]
+            isOneToOne: false
+            referencedRelation: "regionais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       programacao_eventos: {
         Row: {
           criado_em: string
