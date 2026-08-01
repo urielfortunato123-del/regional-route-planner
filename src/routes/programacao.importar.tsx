@@ -153,16 +153,6 @@ function ImportarPagina() {
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
 
-  if (perfil.role === "funcionario") {
-    return (
-      <AppShell perfil={perfil} titulo="Importar PDF">
-        <Cartao className="text-sm text-muted-foreground">
-          A importação de programação é permitida apenas para gestor regional e administrador.
-        </Cartao>
-      </AppShell>
-    );
-  }
-
   const listaVisivel = somenteRevisao ? registros.filter((r) => r.precisaRevisao) : registros;
 
   return (

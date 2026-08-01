@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, Filter, MapPin, Search } from "lucide-react";
 
 import { AppShell, Botao, Cartao, Etiqueta, estiloEntrada } from "@/components/AppShell";
 import { Identificacao } from "@/components/Identificacao";
 import { usePerfilLocal } from "@/lib/perfil-local";
-import { atualizarStatus, listarProgramacoes, listarRegionais } from "@/lib/programacao.functions";
+import { atualizarStatus, listarProgramacoes } from "@/lib/programacao.functions";
+import { guardarProgramacoes, lerProgramacoes, registrarFiscalizacao } from "@/lib/offline/db";
+import { enfileirar } from "@/lib/offline/sync";
 
 export const Route = createFileRoute("/programacao/")({
   head: () => ({
@@ -55,14 +57,7 @@ function ProgramacaoPagina() {
   const [equipe, setEquipe] = useState("");
   const [atividade, setAtividade] = useState("");
   const [contrato, setContrato] = useState("");
-  const [regionalAdmin, setRegionalAdmin] = useState("TODAS");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
-
-  const regionais = useQuery({
-    queryKey: ["regionais"],
-    queryFn: () => listarRegionais(),
-    enabled: perfil?.role === "admin",
-  });
 
   const consulta = useQuery({
     queryKey: [
@@ -75,7 +70,6 @@ function ProgramacaoPagina() {
       equipe,
       atividade,
       contrato,
-      regionalAdmin,
     ],
     enabled: !!perfil?.id,
     queryFn: () =>
@@ -89,21 +83,43 @@ function ProgramacaoPagina() {
           ...(equipe ? { equipe } : {}),
           ...(atividade ? { atividade } : {}),
           ...(contrato ? { contrato } : {}),
-          ...(perfil!.role === "admin" ? { regionalCodigo: regionalAdmin } : {}),
         },
       }),
   });
 
   const mudarStatus = useMutation({
-    mutationFn: (v: { id: string; status: "concluido" | "na_rota" | "pendente"; assumir?: boolean }) =>
-      atualizarStatus({
-        data: {
-          funcionarioId: perfil!.id,
-          programacaoId: v.id,
-          status: v.status,
-          assumir: v.assumir ?? false,
-        },
-      }),
+    mutationFn: async (v: {
+      id: string;
+      status: "concluido" | "na_rota" | "pendente";
+      assumir?: boolean;
+    }) => {
+      const payload = {
+        funcionarioId: perfil!.id,
+        programacaoId: v.id,
+        status: v.status,
+        assumir: v.assumir ?? false,
+      };
+      await registrarFiscalizacao({
+        regional_codigo: perfil!.regional_codigo,
+        programacao_id: v.id,
+        status: v.status,
+        observacao: null,
+        latitude: null,
+        longitude: null,
+        criadoEm: Date.now(),
+        sincronizado: 0,
+      });
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await enfileirar({
+          regional_codigo: perfil!.regional_codigo,
+          tipo: "status",
+          payload,
+          descricao: `Situação: ${v.status}`,
+        });
+        return;
+      }
+      await atualizarStatus({ data: payload });
+    },
     onSuccess: () => {
       toast.success("Situação atualizada.");
       cliente.invalidateQueries({ queryKey: ["programacoes"] });
@@ -112,10 +128,27 @@ function ProgramacaoPagina() {
     onError: (erro: Error) => toast.error(erro.message),
   });
 
+  const [cache, setCache] = useState<Array<Record<string, never>>>([]);
+
+  // Espelho local: a lista continua visível em campo, sem sinal.
+  useEffect(() => {
+    if (!perfil) return;
+    if (consulta.data?.registros) {
+      void guardarProgramacoes(
+        perfil.regional_codigo,
+        consulta.data.registros as unknown as Array<Record<string, unknown>>,
+      );
+    } else if (consulta.isError) {
+      void lerProgramacoes(perfil.regional_codigo).then((r) =>
+        setCache(r as unknown as Array<Record<string, never>>),
+      );
+    }
+  }, [consulta.data, consulta.isError, perfil]);
+
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
 
-  const registros = consulta.data?.registros ?? [];
+  const registros = consulta.data?.registros ?? (cache as unknown as never[]);
 
   return (
     <AppShell perfil={perfil} titulo="Programação">
@@ -159,20 +192,6 @@ function ProgramacaoPagina() {
             <input className={estiloEntrada} placeholder="Equipe" value={equipe} onChange={(e) => setEquipe(e.target.value)} />
             <input className={estiloEntrada} placeholder="Atividade" value={atividade} onChange={(e) => setAtividade(e.target.value)} />
             <input className={estiloEntrada} placeholder="Contrato" value={contrato} onChange={(e) => setContrato(e.target.value)} />
-            {perfil.role === "admin" ? (
-              <select
-                className={estiloEntrada}
-                value={regionalAdmin}
-                onChange={(e) => setRegionalAdmin(e.target.value)}
-              >
-                <option value="TODAS">Todas as regionais</option>
-                {(regionais.data ?? []).map((r) => (
-                  <option key={r.codigo} value={r.codigo}>
-                    {r.rotulo}
-                  </option>
-                ))}
-              </select>
-            ) : null}
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
@@ -188,11 +207,7 @@ function ProgramacaoPagina() {
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {consulta.isFetching
             ? "Carregando..."
-            : `${registros.length} serviço(s) — ${
-                perfil.role === "admin" && regionalAdmin === "TODAS"
-                  ? "todas as regionais"
-                  : perfil.regional_rotulo
-              }`}
+            : `${registros.length} serviço(s) — ${perfil.regional_rotulo}`}
         </p>
 
         {!consulta.isFetching && registros.length === 0 ? (

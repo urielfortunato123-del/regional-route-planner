@@ -122,6 +122,15 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Registra o service worker que mantém o aplicativo utilizável sem sinal.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (window.location.hostname === "localhost") return;
+    const registrar = () => navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    if (document.readyState === "complete") void registrar();
+    else window.addEventListener("load", registrar, { once: true });
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}

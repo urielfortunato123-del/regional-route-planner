@@ -1,8 +1,19 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import type { ReactNode } from "react";
-import { CalendarRange, Home, Map, Settings, Upload } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
+import {
+  CalendarRange,
+  CloudOff,
+  Home,
+  Map,
+  RefreshCw,
+  Route as RouteIcon,
+  Settings,
+  Wifi,
+} from "lucide-react";
 
 import type { PerfilLocal } from "@/lib/perfil-local";
+import { limparOutrasRegionais } from "@/lib/offline/db";
+import { useSincronizacao } from "@/lib/offline/sync";
 import { cn } from "@/lib/utils";
 
 export function Cartao({
@@ -106,9 +117,32 @@ const itensMenu = [
   { para: "/", rotulo: "Início", icone: Home },
   { para: "/programacao", rotulo: "Programação", icone: CalendarRange },
   { para: "/mapa", rotulo: "Mapa", icone: Map },
-  { para: "/programacao/importar", rotulo: "Importar", icone: Upload },
+  { para: "/rota", rotulo: "Rota", icone: RouteIcon },
   { para: "/configuracoes", rotulo: "Ajustes", icone: Settings },
 ] as const;
+
+/** Faixa fixa de estado da conexão e da fila de envio. */
+export function IndicadorConexao({ regional }: { regional: string }) {
+  const { online, pendentes, sincronizando, sincronizar } = useSincronizacao(regional);
+  if (online && pendentes === 0) return null;
+  return (
+    <button
+      onClick={() => void sincronizar()}
+      className={cn(
+        "flex w-full items-center justify-center gap-2 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide",
+        online ? "bg-warning/25 text-warning-foreground" : "bg-destructive/20 text-destructive",
+      )}
+    >
+      {online ? <Wifi className="size-3.5" /> : <CloudOff className="size-3.5" />}
+      {online
+        ? `${pendentes} alteração(ões) aguardando envio`
+        : `Sem conexão — trabalhando offline${pendentes ? ` (${pendentes} na fila)` : ""}`}
+      {online ? (
+        <RefreshCw className={cn("size-3.5", sincronizando && "animate-spin")} />
+      ) : null}
+    </button>
+  );
+}
 
 export function AppShell({
   perfil,
@@ -120,7 +154,11 @@ export function AppShell({
   children: ReactNode;
 }) {
   const caminho = useRouterState({ select: (s) => s.location.pathname });
-  const podeImportar = perfil.role !== "funcionario";
+
+  // Nunca manter no aparelho dados de uma regional que não é a atual.
+  useEffect(() => {
+    void limparOutrasRegionais(perfil.regional_codigo);
+  }, [perfil.regional_codigo]);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -135,18 +173,19 @@ export function AppShell({
           </div>
           <div className="shrink-0 rounded-lg bg-primary-foreground/10 px-3 py-1.5 text-right">
             <p className="truncate text-xs font-semibold">{perfil.nome.split(" ")[0]}</p>
-            <p className="text-[10px] uppercase tracking-wide opacity-80">{perfil.role}</p>
+            <p className="text-[10px] uppercase tracking-wide opacity-80">
+              {perfil.regional_codigo.replace(/_/g, ".")}
+            </p>
           </div>
         </div>
+        <IndicadorConexao regional={perfil.regional_codigo} />
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-4">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl">
-          {itensMenu
-            .filter((item) => item.para !== "/programacao/importar" || podeImportar)
-            .map((item) => {
+          {itensMenu.map((item) => {
               const ativo =
                 item.para === "/" ? caminho === "/" : caminho.startsWith(item.para);
               const Icone = item.icone;
@@ -162,8 +201,8 @@ export function AppShell({
                   <Icone className="size-5" strokeWidth={ativo ? 2.4 : 1.8} />
                   {item.rotulo}
                 </Link>
-              );
-            })}
+            );
+          })}
         </div>
       </nav>
     </div>

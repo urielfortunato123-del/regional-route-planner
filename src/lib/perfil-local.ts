@@ -10,7 +10,6 @@ export type PerfilLocal = {
   matricula: string | null;
   cargo: string | null;
   equipe: string | null;
-  role: "funcionario" | "gestor" | "admin";
   regional_id: string;
   regional_codigo: string;
   regional_rotulo: string;

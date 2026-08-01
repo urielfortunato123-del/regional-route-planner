@@ -16,10 +16,8 @@ export function Identificacao({
 }) {
   const [nome, setNome] = useState(perfilAtual?.nome ?? "");
   const [matricula, setMatricula] = useState(perfilAtual?.matricula ?? "");
-  const [cargo, setCargo] = useState(perfilAtual?.cargo ?? "");
   const [equipe, setEquipe] = useState(perfilAtual?.equipe ?? "");
   const [regional, setRegional] = useState(perfilAtual?.regional_codigo ?? "");
-  const [role, setRole] = useState<PerfilLocal["role"]>(perfilAtual?.role ?? "funcionario");
 
   const regionais = useQuery({
     queryKey: ["regionais"],
@@ -33,10 +31,8 @@ export function Identificacao({
           ...(perfilAtual?.id ? { id: perfilAtual.id } : {}),
           nome: nome.trim(),
           matricula: matricula || null,
-          cargo: cargo || null,
           equipe: equipe || null,
           regional_codigo: regional,
-          role,
         },
       }),
     onSuccess: (perfil) => {
@@ -94,7 +90,7 @@ export function Identificacao({
 
           <details className="rounded-lg border border-border bg-surface p-3">
             <summary className="cursor-pointer text-sm font-semibold text-foreground">
-              Dados complementares (opcional)
+              Matrícula e equipe (opcional)
             </summary>
             <div className="mt-3 space-y-3">
               <Campo rotulo="Matrícula">
@@ -105,14 +101,6 @@ export function Identificacao({
                   placeholder="Matrícula ou identificação"
                 />
               </Campo>
-              <Campo rotulo="Cargo">
-                <input
-                  className={estiloEntrada}
-                  value={cargo}
-                  onChange={(e) => setCargo(e.target.value)}
-                  placeholder="Ex.: Fiscal de conservação"
-                />
-              </Campo>
               <Campo rotulo="Equipe">
                 <input
                   className={estiloEntrada}
@@ -120,20 +108,6 @@ export function Identificacao({
                   onChange={(e) => setEquipe(e.target.value)}
                   placeholder="Ex.: Equipe 2"
                 />
-              </Campo>
-              <Campo
-                rotulo="Perfil de acesso"
-                dica="Gestor e administrador podem importar PDF e corrigir dados."
-              >
-                <select
-                  className={estiloEntrada}
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as PerfilLocal["role"])}
-                >
-                  <option value="funcionario">Funcionário</option>
-                  <option value="gestor">Gestor regional</option>
-                  <option value="admin">Administrador</option>
-                </select>
               </Campo>
             </div>
           </details>
@@ -147,7 +121,7 @@ export function Identificacao({
           </Botao>
 
           <p className="text-center text-xs text-muted-foreground">
-            Sem cadastro, sem senha. Seus dados ficam salvos neste aparelho.
+            Sem login, sem senha e sem cadastro. Nome e regional ficam salvos neste aparelho.
           </p>
         </Cartao>
       </div>

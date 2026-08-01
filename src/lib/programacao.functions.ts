@@ -16,7 +16,6 @@ export const salvarPerfil = createServerFn({ method: "POST" })
         cargo: z.string().max(80).optional().nullable(),
         equipe: z.string().max(80).optional().nullable(),
         regional_codigo: z.string().min(3),
-        role: z.enum(["funcionario", "gestor", "admin"]).default("funcionario"),
       })
       .parse(d),
   )
@@ -38,7 +37,7 @@ export const salvarPerfil = createServerFn({ method: "POST" })
       cargo: data.cargo || null,
       equipe: data.equipe || null,
       regional_id: regional.id,
-      role: data.role,
+      role: "funcionario" as const,
     };
 
     if (data.id) {
@@ -135,9 +134,6 @@ export const importarProgramacao = createServerFn({ method: "POST" })
     const { carregarPerfil, montarChaveDuplicidade } = await import("@/lib/programacao.server");
 
     const perfil = await carregarPerfil(data.funcionarioId);
-    if (perfil.role === "funcionario") {
-      throw new Error("Somente gestor regional ou administrador pode importar programação.");
-    }
 
     const { data: regionais, error: erroRegionais } = await supabaseAdmin
       .from("regionais")
@@ -145,13 +141,10 @@ export const importarProgramacao = createServerFn({ method: "POST" })
     if (erroRegionais) throw new Error(erroRegionais.message);
     const idPorCodigo = new Map((regionais ?? []).map((r) => [r.codigo, r.id]));
 
-    // Gestor só importa a própria regional
-    const registrosPermitidos =
-      perfil.role === "admin"
-        ? data.registros
-        : data.registros.filter(
-            (r) => r.regional_codigo === perfil.regional_codigo || !r.regional_codigo,
-          );
+    // Todas as linhas do PDF são gravadas; a separação por regional acontece
+    // na leitura (cada aparelho enxerga apenas a regional selecionada) e as
+    // linhas sem regional ficam disponíveis na tela de revisão.
+    const registrosPermitidos = data.registros;
 
     const { data: versaoAnterior } = await supabaseAdmin
       .from("arquivos_programacao")
@@ -263,17 +256,9 @@ export const listarProgramacoes = createServerFn({ method: "POST" })
     let consulta = supabaseAdmin.from("programacoes").select(COLUNAS_PROGRAMACAO);
 
     // === FILTRO DE REGIONAL — aplicado no servidor, sempre ===
-    if (perfil.role === "admin") {
-      if (data.regionalCodigo && data.regionalCodigo !== "TODAS") {
-        consulta = consulta.eq("regional_codigo", data.regionalCodigo);
-      }
-    } else {
-      consulta = consulta.eq("regional_id", perfil.regional_id);
-      if (perfil.role === "funcionario") {
-        // registros sem regional confirmada ficam ocultos até um gestor confirmar
-        consulta = consulta.eq("regional_confirmada", true);
-      }
-    }
+    // O cliente envia apenas o id do funcionário: a regional vem do banco.
+    // Registros sem regional confirmada só aparecem na tela de revisão.
+    consulta = consulta.eq("regional_id", perfil.regional_id).eq("regional_confirmada", true);
 
     const hoje = new Date();
     const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -311,21 +296,110 @@ export const listarProgramacoes = createServerFn({ method: "POST" })
     return { perfil, registros: registros ?? [] };
   });
 
-export const listarPendentesDeRegional = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ funcionarioId: z.string().uuid() }).parse(d))
+/**
+ * Tela "Revisar dados da programação": devolve apenas
+ *  - registros da regional selecionada no aparelho e
+ *  - registros que o leitor de PDF não conseguiu classificar (sem regional).
+ */
+export const listarParaRevisao = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        funcionarioId: z.string().uuid(),
+        somentePendentes: z.boolean().default(false),
+      })
+      .parse(d),
+  )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { carregarPerfil, COLUNAS_PROGRAMACAO } = await import("@/lib/programacao.server");
     const perfil = await carregarPerfil(data.funcionarioId);
-    if (perfil.role === "funcionario") return [];
 
     const { data: registros, error } = await supabaseAdmin
       .from("programacoes")
       .select(COLUNAS_PROGRAMACAO)
-      .eq("regional_confirmada", false)
-      .limit(500);
+      .or(`regional_id.eq.${perfil.regional_id},regional_id.is.null`)
+      .order("regional_confirmada", { ascending: true })
+      .order("data_inicial", { ascending: true })
+      .limit(1000);
     if (error) throw new Error(error.message);
-    return registros ?? [];
+
+    const todos = registros ?? [];
+    const semRegional = todos.filter((r) => !r.regional_id || !r.regional_confirmada);
+    return {
+      perfil,
+      registros: data.somentePendentes ? semRegional : todos,
+      totalPendentes: semRegional.length,
+      totalRegional: todos.length - semRegional.length,
+    };
+  });
+
+export const excluirRegistro = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ funcionarioId: z.string().uuid(), id: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const perfil = await carregarPerfil(data.funcionarioId);
+
+    const { data: registro, error: erroBusca } = await supabaseAdmin
+      .from("programacoes")
+      .select("id, regional_id")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (erroBusca) throw new Error(erroBusca.message);
+    if (!registro) return { ok: true };
+    if (registro.regional_id && registro.regional_id !== perfil.regional_id) {
+      throw new Error("Este serviço pertence a outra regional e não pode ser excluído aqui.");
+    }
+
+    const { error } = await supabaseAdmin.from("programacoes").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Grava as coordenadas obtidas na malha oficial do DER para um serviço. */
+export const salvarCoordenadas = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        funcionarioId: z.string().uuid(),
+        itens: z
+          .array(
+            z.object({
+              id: z.string().uuid(),
+              latitude_inicial: z.number(),
+              longitude_inicial: z.number(),
+              latitude_final: z.number().nullable().optional(),
+              longitude_final: z.number().nullable().optional(),
+              localizacao_confirmada: z.boolean().default(true),
+            }),
+          )
+          .min(1)
+          .max(500),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const perfil = await carregarPerfil(data.funcionarioId);
+
+    for (const item of data.itens) {
+      await supabaseAdmin
+        .from("programacoes")
+        .update({
+          latitude_inicial: item.latitude_inicial,
+          longitude_inicial: item.longitude_inicial,
+          latitude_final: item.latitude_final ?? null,
+          longitude_final: item.longitude_final ?? null,
+          localizacao_confirmada: item.localizacao_confirmada,
+        })
+        .eq("id", item.id)
+        .eq("regional_id", perfil.regional_id);
+    }
+    return { ok: true, atualizados: data.itens.length };
   });
 
 export const corrigirRegistro = createServerFn({ method: "POST" })
@@ -355,7 +429,6 @@ export const corrigirRegistro = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { carregarPerfil } = await import("@/lib/programacao.server");
     const perfil = await carregarPerfil(data.funcionarioId);
-    if (perfil.role === "funcionario") throw new Error("Sem permissão para corrigir registros.");
 
     const campos: {
       [k: string]: string | number | boolean | null | undefined;
@@ -367,21 +440,17 @@ export const corrigirRegistro = createServerFn({ method: "POST" })
         .eq("codigo", data.campos.regional_codigo)
         .maybeSingle();
       if (!regional) throw new Error("Regional inválida.");
-      if (perfil.role === "gestor" && regional.codigo !== perfil.regional_codigo) {
-        throw new Error("Gestor só pode confirmar registros da própria regional.");
-      }
       campos['regional_id'] = regional.id;
       campos['regional_confirmada'] = true;
       campos['regional_origem'] = "confirmacao_manual";
     }
 
-    let consulta = supabaseAdmin
+    // Só é possível corrigir registros da própria regional ou ainda sem regional.
+    const consulta = supabaseAdmin
       .from("programacoes")
       .update(campos as never)
-      .eq("id", data.id);
-    if (perfil.role === "gestor") {
-      consulta = consulta.or(`regional_id.eq.${perfil.regional_id},regional_id.is.null`);
-    }
+      .eq("id", data.id)
+      .or(`regional_id.eq.${perfil.regional_id},regional_id.is.null`);
     const { error } = await consulta;
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -424,7 +493,7 @@ export const atualizarStatus = createServerFn({ method: "POST" })
       .maybeSingle();
     if (erroBusca) throw new Error(erroBusca.message);
     if (!registro) throw new Error("Serviço não encontrado.");
-    if (perfil.role !== "admin" && registro.regional_id !== perfil.regional_id) {
+    if (registro.regional_id !== perfil.regional_id) {
       throw new Error("Este serviço não pertence à sua regional.");
     }
     if (
@@ -473,14 +542,173 @@ export const resumoDoDia = createServerFn({ method: "POST" })
       .select("status")
       .lte("data_inicial", hoje)
       .gte("data_final", hoje);
-    if (perfil.role !== "admin") {
-      consulta = consulta.eq("regional_id", perfil.regional_id);
-      if (perfil.role === "funcionario") consulta = consulta.eq("regional_confirmada", true);
-    }
+    consulta = consulta.eq("regional_id", perfil.regional_id).eq("regional_confirmada", true);
 
     const { data: registros, error } = await consulta;
     if (error) throw new Error(error.message);
     const total = registros?.length ?? 0;
     const concluidos = (registros ?? []).filter((r) => r.status === "concluido").length;
     return { perfil, total, concluidos, pendentes: total - concluidos };
+  });
+
+// ============================ ROTAS ============================
+
+export const salvarRota = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        funcionarioId: z.string().uuid(),
+        rotaId: z.string().uuid().nullable().optional(),
+        tipo: z.enum(["sugerida", "manual"]),
+        data: z.string().min(8),
+        pontoInicial: z
+          .object({
+            rotulo: z.string(),
+            latitude: z.number(),
+            longitude: z.number(),
+            origem: z.string().optional(),
+          })
+          .nullable(),
+        distanciaTotal: z.number().nullable().optional(),
+        tempoEstimado: z.number().int().nullable().optional(),
+        itens: z
+          .array(
+            z.object({
+              programacaoId: z.string().uuid(),
+              ordem: z.number().int().min(1),
+              rotulo: z.string().max(200),
+              latitude: z.number(),
+              longitude: z.number(),
+              distanciaAnterior: z.number().nullable().optional(),
+            }),
+          )
+          .min(1)
+          .max(200),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const { validarRota, textoDosProblemas } = await import("@/lib/rotas/validacao");
+    const perfil = await carregarPerfil(data.funcionarioId);
+
+    // Confere no banco (não no navegador) a regional de cada serviço da rota.
+    const ids = data.itens.map((i) => i.programacaoId);
+    const { data: registros, error: erroBusca } = await supabaseAdmin
+      .from("programacoes")
+      .select("id, regional_codigo, regional_id, regional_confirmada, rodovia, km_inicial")
+      .in("id", ids);
+    if (erroBusca) throw new Error(erroBusca.message);
+
+    const porId = new Map((registros ?? []).map((r) => [r.id, r]));
+    const faltando = ids.filter((id) => !porId.has(id));
+    if (faltando.length) throw new Error("Alguns serviços da rota não existem mais no banco.");
+
+    const problemas = validarRota(
+      data.itens.map((i) => {
+        const r = porId.get(i.programacaoId)!;
+        return {
+          programacaoId: i.programacaoId,
+          rotulo: i.rotulo,
+          regionalCodigo: r.regional_codigo,
+          regionalConfirmada: Boolean(r.regional_confirmada) && r.regional_id === perfil.regional_id,
+          latitude: i.latitude,
+          longitude: i.longitude,
+          ordem: i.ordem,
+        };
+      }),
+      data.pontoInicial,
+      perfil.regional_codigo,
+    );
+    if (problemas.length) throw new Error(textoDosProblemas(problemas));
+
+    const cabecalho = {
+      usuario_id: perfil.id,
+      usuario_nome: perfil.nome,
+      regional_id: perfil.regional_id,
+      data: data.data,
+      tipo: data.tipo,
+      ponto_inicial: data.pontoInicial,
+      distancia_total: data.distanciaTotal ?? null,
+      tempo_estimado: data.tempoEstimado ?? null,
+      status: "ativa" as const,
+    };
+
+    let rotaId = data.rotaId ?? null;
+    if (rotaId) {
+      const { error } = await supabaseAdmin
+        .from("rotas")
+        .update(cabecalho)
+        .eq("id", rotaId)
+        .eq("regional_id", perfil.regional_id);
+      if (error) throw new Error(error.message);
+      await supabaseAdmin.from("rota_itens").delete().eq("rota_id", rotaId);
+    } else {
+      const { data: criada, error } = await supabaseAdmin
+        .from("rotas")
+        .insert(cabecalho)
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      rotaId = criada.id;
+    }
+
+    const { error: erroItens } = await supabaseAdmin.from("rota_itens").insert(
+      data.itens.map((i) => ({
+        rota_id: rotaId!,
+        programacao_id: i.programacaoId,
+        ordem: i.ordem,
+        rotulo: i.rotulo,
+        latitude: i.latitude,
+        longitude: i.longitude,
+        distancia_anterior: i.distanciaAnterior ?? null,
+      })),
+    );
+    if (erroItens) throw new Error(erroItens.message);
+
+    await supabaseAdmin
+      .from("programacoes")
+      .update({ status: "na_rota" })
+      .in("id", ids)
+      .eq("regional_id", perfil.regional_id)
+      .eq("status", "pendente");
+
+    return { ok: true, rotaId, itens: data.itens.length };
+  });
+
+export const listarRotas = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ funcionarioId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const perfil = await carregarPerfil(data.funcionarioId);
+
+    const { data: rotas, error } = await supabaseAdmin
+      .from("rotas")
+      .select(
+        "id, data, tipo, status, distancia_total, tempo_estimado, ponto_inicial, usuario_nome, criado_em, rota_itens(id, ordem, rotulo, latitude, longitude, programacao_id, status)",
+      )
+      .eq("regional_id", perfil.regional_id)
+      .order("criado_em", { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    return { perfil, rotas: rotas ?? [] };
+  });
+
+export const excluirRota = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ funcionarioId: z.string().uuid(), rotaId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const perfil = await carregarPerfil(data.funcionarioId);
+    const { error } = await supabaseAdmin
+      .from("rotas")
+      .delete()
+      .eq("id", data.rotaId)
+      .eq("regional_id", perfil.regional_id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
