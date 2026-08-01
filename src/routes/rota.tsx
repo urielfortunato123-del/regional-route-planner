@@ -48,7 +48,7 @@ export const Route = createFileRoute("/rota")({
       },
     ],
   }),
-  component: RotaPagina;
+  component: RotaPagina,
 });
 
 type Servico = {
