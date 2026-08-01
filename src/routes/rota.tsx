@@ -900,7 +900,9 @@ function RotaPagina() {
           </>
         ) : (
           <Cartao className="text-center text-sm text-muted-foreground">
-            Toque em “Posicionar” para localizar os serviços da programação na malha do DER-SP.
+            Toque em “📍 Posicionar serviços”, no cartão acima, para localizar a programação na
+            malha oficial do DER-SP e liberar a geração da rota.
+
           </Cartao>
         )}
 
