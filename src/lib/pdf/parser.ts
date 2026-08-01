@@ -273,7 +273,7 @@ function extrairPorAncoras(texto: string): Partial<Record<CampoTabela, string>> 
     const cauda = resto.slice((ultimaData.index ?? 0) + ultimaData[0].length).trim();
     const mMedicao = cauda.match(/^([\d.,]+)\s*(.*)$/s);
     if (mMedicao) {
-      saida.medicao = mMedicao[1];
+      saida.medicao = mMedicao[1] ?? "";
       const obs = (mMedicao[2] ?? "").trim();
       if (obs) saida.observacao = obs;
     } else if (cauda) {
