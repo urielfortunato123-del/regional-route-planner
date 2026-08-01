@@ -185,7 +185,8 @@ function distribuirEmColunas(linha: Palavra[], colunas: Coluna[]): Partial<Recor
 const RE_RODOVIA =
   /\b(SPA|SPM|SPI|SP|BR|VIC|VCS)\s*[-.]?\s*\d{2,3}(?:\s*\/\s*\d{2,3})?(?:\s+[A-Z]\b)?/i;
 const RE_RODOVIA_G = new RegExp(RE_RODOVIA.source, "gi");
-const RE_REGIONAL_ROTULO = /\bCGR\.?\s*\d{1,2}\s*[-–]\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]{2,})?/i;
+const RE_REGIONAL_ROTULO =
+  /\bCGR\.?\s*\d{1,2}\s*[-–]\s*[A-Za-zÀ-ÿ]+(?:\s+(?!Conserva|Manuten|Melhor|Emerg|Obras|Rotina|Sinaliza)[A-Za-zÀ-ÿ]{2,})*/i;
 const RE_CONTRATO = /\d{2}\.\d{3}-\d[^]*?(?:\)|(?=\s[A-ZÀ-Ÿ][a-zà-ÿ]))/;
 const RE_KM = /\b\d{1,4}[.,]\d{1,3}\b/g;
 const RE_DATA = /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g;
