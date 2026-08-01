@@ -15,42 +15,42 @@ export const COLUNAS_OCORRENCIA =
   "id, regional_id, regional_codigo, programacao_id, funcionario_id, funcionario_nome, equipe, contrato, tipo, rodovia, km, km_final, sentido, faixa, prioridade, risco, descricao, necessita_atendimento, prazo, observacao, situacao, fotos, latitude, longitude, registrada_em";
 
 export type DadosInspecao = {
-  programacaoId?: string | null;
-  equipe?: string | null;
-  contrato?: string | null;
-  atividade?: string | null;
-  rodovia?: string | null;
-  kmInicial?: number | null;
-  kmFinal?: number | null;
-  condicao?: string | null;
-  servicoExecutado?: string | null;
-  naoConformidade?: string | null;
-  observacao?: string | null;
-  situacao?: string | null;
-  fotos?: string[];
-  latitude?: number | null;
-  longitude?: number | null;
+  programacaoId?: string | null | undefined;
+  equipe?: string | null | undefined;
+  contrato?: string | null | undefined;
+  atividade?: string | null | undefined;
+  rodovia?: string | null | undefined;
+  kmInicial?: number | null | undefined;
+  kmFinal?: number | null | undefined;
+  condicao?: string | null | undefined;
+  servicoExecutado?: string | null | undefined;
+  naoConformidade?: string | null | undefined;
+  observacao?: string | null | undefined;
+  situacao?: string | null | undefined;
+  fotos?: string[] | undefined;
+  latitude?: number | null | undefined;
+  longitude?: number | null | undefined;
 };
 
 export type DadosOcorrencia = {
-  programacaoId?: string | null;
-  equipe?: string | null;
-  contrato?: string | null;
+  programacaoId?: string | null | undefined;
+  equipe?: string | null | undefined;
+  contrato?: string | null | undefined;
   tipo: string;
-  rodovia?: string | null;
-  km?: number | null;
-  kmFinal?: number | null;
-  sentido?: string | null;
-  faixa?: string | null;
-  prioridade?: string | null;
-  risco?: string | null;
+  rodovia?: string | null | undefined;
+  km?: number | null | undefined;
+  kmFinal?: number | null | undefined;
+  sentido?: string | null | undefined;
+  faixa?: string | null | undefined;
+  prioridade?: string | null | undefined;
+  risco?: string | null | undefined;
   descricao: string;
-  necessitaAtendimento?: boolean;
-  prazo?: string | null;
-  observacao?: string | null;
-  fotos?: string[];
-  latitude?: number | null;
-  longitude?: number | null;
+  necessitaAtendimento?: boolean | undefined;
+  prazo?: string | null | undefined;
+  observacao?: string | null | undefined;
+  fotos?: string[] | undefined;
+  latitude?: number | null | undefined;
+  longitude?: number | null | undefined;
 };
 
 function coordenadaValida(lat: number | null | undefined, lon: number | null | undefined) {
@@ -160,7 +160,11 @@ export async function listarInspecoesDb(
 export async function atualizarInspecaoDb(
   funcionarioId: string,
   id: string,
-  campos: { situacao?: string; observacao?: string | null; naoConformidade?: string | null },
+  campos: {
+    situacao?: string | undefined;
+    observacao?: string | null | undefined;
+    naoConformidade?: string | null | undefined;
+  },
 ) {
   const perfil = await carregarPerfil(funcionarioId);
   const { data, error } = await supabaseAdmin
@@ -254,7 +258,11 @@ export async function listarOcorrenciasDb(
 export async function atualizarOcorrenciaDb(
   funcionarioId: string,
   id: string,
-  campos: { situacao?: string; observacao?: string | null; prioridade?: string },
+  campos: {
+    situacao?: string | undefined;
+    observacao?: string | null | undefined;
+    prioridade?: string | undefined;
+  },
 ) {
   const perfil = await carregarPerfil(funcionarioId);
   const { data, error } = await supabaseAdmin
