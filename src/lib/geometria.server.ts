@@ -45,15 +45,15 @@ export async function buscarPendentes(
 export type ResultadoGeometria = {
   id: string;
   status: StatusGeometria;
-  latitude_inicial?: number | null;
-  longitude_inicial?: number | null;
-  latitude_final?: number | null;
-  longitude_final?: number | null;
+  latitude_inicial?: number | null | undefined;
+  longitude_inicial?: number | null | undefined;
+  latitude_final?: number | null | undefined;
+  longitude_final?: number | null | undefined;
   geometria?: unknown;
-  fonte?: string | null;
-  precisao?: string | null;
-  erro?: string | null;
-  confirmada?: boolean;
+  fonte?: string | null | undefined;
+  precisao?: string | null | undefined;
+  erro?: string | null | undefined;
+  confirmada?: boolean | undefined;
 };
 
 /**
