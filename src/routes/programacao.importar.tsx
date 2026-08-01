@@ -112,7 +112,13 @@ function ImportarPagina() {
             observacao: r.observacao,
             pagina_pdf: r.pagina_pdf,
             linha_bruta: r.linha_bruta,
+            status_conferencia: r.status_conferencia,
+            motivo_conferencia: r.motivo_conferencia,
+            data_fora_periodo: r.data_fora_periodo,
+            periodo_inicio_esperado: r.periodo_inicio_esperado ?? resultado!.periodo.inicio,
+            periodo_fim_esperado: r.periodo_fim_esperado ?? resultado!.periodo.fim,
           })),
+
         },
       }),
     onSuccess: (r) => {
