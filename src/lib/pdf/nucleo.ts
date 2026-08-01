@@ -399,7 +399,7 @@ export function detectarPeriodoDeclarado(texto: string): {
   fim: string | null;
 } {
   const m = texto.match(
-    /(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\s*(?:a|à|ate|até|-|–)\s*(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/i,
+    /(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})[\s_]*(?:a|à|ate|até|-|–)[\s_]*(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/i,
   );
   if (!m) return { inicio: null, fim: null };
   const inicio = parseData(`${m[1]}/${m[2]}/${m[3]}`);
