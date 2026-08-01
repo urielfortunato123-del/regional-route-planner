@@ -1,6 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarRange, ClipboardList, Map, Route as RouteIcon, Upload } from "lucide-react";
+import {
+  CalendarRange,
+  ClipboardCheck,
+  ClipboardList,
+  Map,
+  Route as RouteIcon,
+  Upload,
+} from "lucide-react";
 
 import { AppShell, Botao, Cartao } from "@/components/AppShell";
 import { Identificacao } from "@/components/Identificacao";
@@ -81,37 +88,29 @@ function Inicio() {
               <ClipboardList className="size-5" /> Serviços pendentes
             </Botao>
           </Link>
-          <Botao
-            className="w-full justify-start"
-            variante="contorno"
-            disabled
-            title="Disponível na próxima etapa"
-          >
-            <RouteIcon className="size-5" /> Gerar rota sugerida
-          </Botao>
-          <Botao
-            className="w-full justify-start"
-            variante="contorno"
-            disabled
-            title="Disponível na próxima etapa"
-          >
-            <Map className="size-5" /> Abrir mapa
-          </Botao>
-          {perfil.role !== "funcionario" ? (
-            <Link to="/programacao/importar" className="sm:col-span-2">
-              <Botao className="w-full justify-start" variante="destaque">
-                <Upload className="size-5" /> Importar programação em PDF
-              </Botao>
-            </Link>
-          ) : null}
+          <Link to="/rota">
+            <Botao className="w-full justify-start" variante="contorno">
+              <RouteIcon className="size-5" /> Montar rota do dia
+            </Botao>
+          </Link>
+          <Link to="/mapa">
+            <Botao className="w-full justify-start" variante="contorno">
+              <Map className="size-5" /> Abrir mapa
+            </Botao>
+          </Link>
+          <Link to="/programacao/revisar">
+            <Botao className="w-full justify-start" variante="contorno">
+              <ClipboardCheck className="size-5" /> Revisar dados da programação
+            </Botao>
+          </Link>
+          <Link to="/programacao/importar">
+            <Botao className="w-full justify-start" variante="destaque">
+              <Upload className="size-5" /> Importar programação em PDF
+            </Botao>
+          </Link>
         </div>
 
-        <Cartao className="bg-surface">
-          <p className="text-sm text-muted-foreground">
-            Mapa da regional, marcos quilométricos e roteirização (OpenStreetMap + OSRM) entram na
-            próxima etapa, sobre esta mesma base de dados já filtrada por regional.
-          </p>
-        </Cartao>
+
       </div>
     </AppShell>
   );

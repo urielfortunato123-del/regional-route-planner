@@ -55,14 +55,7 @@ function ProgramacaoPagina() {
   const [equipe, setEquipe] = useState("");
   const [atividade, setAtividade] = useState("");
   const [contrato, setContrato] = useState("");
-  const [regionalAdmin, setRegionalAdmin] = useState("TODAS");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
-
-  const regionais = useQuery({
-    queryKey: ["regionais"],
-    queryFn: () => listarRegionais(),
-    enabled: perfil?.role === "admin",
-  });
 
   const consulta = useQuery({
     queryKey: [
@@ -75,7 +68,6 @@ function ProgramacaoPagina() {
       equipe,
       atividade,
       contrato,
-      regionalAdmin,
     ],
     enabled: !!perfil?.id,
     queryFn: () =>
@@ -89,7 +81,6 @@ function ProgramacaoPagina() {
           ...(equipe ? { equipe } : {}),
           ...(atividade ? { atividade } : {}),
           ...(contrato ? { contrato } : {}),
-          ...(perfil!.role === "admin" ? { regionalCodigo: regionalAdmin } : {}),
         },
       }),
   });
@@ -159,20 +150,6 @@ function ProgramacaoPagina() {
             <input className={estiloEntrada} placeholder="Equipe" value={equipe} onChange={(e) => setEquipe(e.target.value)} />
             <input className={estiloEntrada} placeholder="Atividade" value={atividade} onChange={(e) => setAtividade(e.target.value)} />
             <input className={estiloEntrada} placeholder="Contrato" value={contrato} onChange={(e) => setContrato(e.target.value)} />
-            {perfil.role === "admin" ? (
-              <select
-                className={estiloEntrada}
-                value={regionalAdmin}
-                onChange={(e) => setRegionalAdmin(e.target.value)}
-              >
-                <option value="TODAS">Todas as regionais</option>
-                {(regionais.data ?? []).map((r) => (
-                  <option key={r.codigo} value={r.codigo}>
-                    {r.rotulo}
-                  </option>
-                ))}
-              </select>
-            ) : null}
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
@@ -188,11 +165,7 @@ function ProgramacaoPagina() {
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {consulta.isFetching
             ? "Carregando..."
-            : `${registros.length} serviço(s) — ${
-                perfil.role === "admin" && regionalAdmin === "TODAS"
-                  ? "todas as regionais"
-                  : perfil.regional_rotulo
-              }`}
+            : `${registros.length} serviço(s) — ${perfil.regional_rotulo}`}
         </p>
 
         {!consulta.isFetching && registros.length === 0 ? (

@@ -46,7 +46,6 @@ function Configuracoes() {
           matricula: matricula || null,
           equipe: equipe || null,
           regional_codigo: regional,
-          role: perfil!.role,
         },
       }),
     onSuccess: (p) => {
@@ -100,8 +99,8 @@ function Configuracoes() {
 
         <Cartao className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Nível de acesso atual: <strong className="text-foreground">{perfil.role}</strong>. A
-            alteração de nível é feita pelo administrador.
+            O aplicativo não usa login, senha nem cadastro. Basta o nome e a regional; tudo fica
+            guardado neste aparelho.
           </p>
           <Botao
             variante="perigo"
