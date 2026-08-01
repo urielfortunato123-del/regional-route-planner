@@ -269,7 +269,13 @@ function RotaPagina() {
       ordem: i + 1,
     }));
 
-  const problemas = perfil ? validarRota(itensRota, partida, perfil.regional_codigo) : [];
+  const problemas = perfil
+    ? validarRota(
+        itensRota,
+        partida ? { rotulo: partida.rotulo, latitude: partida.lat, longitude: partida.lon } : null,
+        perfil.regional_codigo,
+      )
+    : [];
 
   const distanciaTotal = useMemo(() => {
     if (!partida || itensRota.length === 0) return 0;
