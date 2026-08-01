@@ -79,6 +79,20 @@ function ImportarPagina() {
 
   const comProblema = registros.filter((r) => r.precisaRevisao).length;
   const semRegional = registros.filter((r) => !r.regional_codigo).length;
+  const datasDivergentes = registros.filter((r) => r.data_fora_periodo).length;
+  const validacao = useMemo(
+    () =>
+      resultado
+        ? validarLeitura(
+            resultado.nomeArquivo,
+            resultado.totalPaginas,
+            registros,
+            resultado.diagnostico ?? [],
+          )
+        : null,
+    [resultado, registros],
+  );
+
 
   const enviar = useMutation({
     mutationFn: () =>
