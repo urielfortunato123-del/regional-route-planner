@@ -167,8 +167,14 @@ export const criarImportacao = createServerFn({ method: "POST" })
         duplicado,
         status_validacao: valido ? ("valido" as const) : ("revisar" as const),
         motivos,
+        status_conferencia: r.status_conferencia ?? (valido ? "OK" : "DADOS_INCOMPLETOS"),
+        motivo_conferencia: r.motivo_conferencia ?? (motivos.join(" · ") || null),
+        data_fora_periodo: r.data_fora_periodo ?? false,
+        periodo_inicio_esperado: r.periodo_inicio_esperado ?? data.arquivo.periodo_inicio ?? null,
+        periodo_fim_esperado: r.periodo_fim_esperado ?? data.arquivo.periodo_fim ?? null,
       };
     });
+
 
     for (let i = 0; i < linhas.length; i += 400) {
       const { error } = await supabaseAdmin
