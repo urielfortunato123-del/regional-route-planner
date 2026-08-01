@@ -145,8 +145,20 @@ function agruparLinhas(palavras: Palavra[], tolerancia = 3): Palavra[][] {
   return linhas;
 }
 
+/**
+ * Uma linha que traz data, quilometragem ou o código de uma regional é dado,
+ * nunca cabeçalho.
+ */
+function pareceLinhaDeDados(texto: string): boolean {
+  if (/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(texto)) return true;
+  if (detectarRegionalNaLinha(texto)) return true;
+  return (texto.match(/\b\d{1,4}[.,]\d{1,3}\b/g)?.length ?? 0) >= 2;
+}
+
 /** Tenta ler uma linha como cabeçalho de tabela. Retorna as colunas. */
 function lerCabecalho(linha: Palavra[]): Coluna[] | null {
+  if (pareceLinhaDeDados(linha.map((p) => p.texto).join(" "))) return null;
+
   const encontrados: Coluna[] = [];
   const usados = new Set<CampoTabela>();
 
