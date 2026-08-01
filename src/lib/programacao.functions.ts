@@ -237,7 +237,10 @@ export const listarProgramacoes = createServerFn({ method: "POST" })
       .object({
         funcionarioId: z.string().uuid(),
         regionalCodigo: z.string().optional(),
-        visao: z.enum(["hoje", "amanha", "semana", "todas", "concluidas", "pendentes"]).default("hoje"),
+        visao: z
+          .enum(["hoje", "amanha", "semana", "todas", "concluidas", "pendentes", "dia"])
+          .default("hoje"),
+        dia: z.string().max(10).optional(),
         somenteMeus: z.boolean().default(false),
         busca: z.string().max(120).optional(),
         rodovia: z.string().max(60).optional(),
