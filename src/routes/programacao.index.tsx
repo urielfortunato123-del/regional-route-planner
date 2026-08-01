@@ -128,9 +128,6 @@ function ProgramacaoPagina() {
     onError: (erro: Error) => toast.error(erro.message),
   });
 
-  if (!carregado) return <div className="min-h-screen bg-background" />;
-  if (!perfil) return <Identificacao aoConcluir={salvar} />;
-
   const [cache, setCache] = useState<Array<Record<string, never>>>([]);
 
   // Espelho local: a lista continua visível em campo, sem sinal.
@@ -147,6 +144,9 @@ function ProgramacaoPagina() {
       );
     }
   }, [consulta.data, consulta.isError, perfil]);
+
+  if (!carregado) return <div className="min-h-screen bg-background" />;
+  if (!perfil) return <Identificacao aoConcluir={salvar} />;
 
   const registros = consulta.data?.registros ?? (cache as unknown as never[]);
 
