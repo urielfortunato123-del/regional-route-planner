@@ -626,7 +626,7 @@ function RotaPagina() {
             disabled={localizando || registros.length === 0}
           >
             <MapPin className="size-4" />
-            {localizando ? `Posicionando serviços… ${progresso}%` : "📍 Posicionar serviços"}
+            {localizando ? `Posicionando serviços… ${progresso}%` : "Posicionar serviços"}
           </Botao>
 
           {localizando ? (
@@ -900,7 +900,7 @@ function RotaPagina() {
           </>
         ) : (
           <Cartao className="text-center text-sm text-muted-foreground">
-            Toque em “📍 Posicionar serviços”, no cartão acima, para localizar a programação na
+            Toque em “Posicionar serviços”, no cartão acima, para localizar a programação na
             malha oficial do DER-SP e liberar a geração da rota.
 
           </Cartao>
