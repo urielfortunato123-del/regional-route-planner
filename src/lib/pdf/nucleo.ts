@@ -252,13 +252,27 @@ const RE_DATA = /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g;
 const RE_IGNORAR =
   /^(versao|diretoria de operacoes|planejamento (semanal|diario|quinzenal|mensal)|gerenciamento me|pagina|page)/;
 
+/**
+ * Cabeçalho da tabela em texto puro (OCR ou páginas sem geometria):
+ * várias palavras de cabeçalho, nenhum número e nenhuma regional.
+ */
+export function cabecalhoEmTexto(texto: string): boolean {
+  if (pareceLinhaDeDados(texto)) return false;
+  if (/\d/.test(texto)) return false;
+  const t = normalizarTexto(texto);
+  const termos = ["equipe", "regional", "categoria", "contrato", "rodovia", "km inicial", "km final", "descricao", "medicao", "observacao"];
+  return termos.filter((termo) => t.includes(termo)).length >= 4;
+}
+
 function linhaEhDado(texto: string): boolean {
   const t = normalizarTexto(texto);
   if (t.length < 6) return false;
   if (RE_IGNORAR.test(t)) return false;
   if (/total de registros|assinatura|emitido em/.test(t)) return false;
+  if (cabecalhoEmTexto(texto)) return false;
   return RE_RODOVIA.test(texto) || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(texto) || /\bkm\b/i.test(texto);
 }
+
 
 /** Um valor só é texto útil se não for apenas números, datas e quilometragens. */
 function textoUtil(valor: string): boolean {
