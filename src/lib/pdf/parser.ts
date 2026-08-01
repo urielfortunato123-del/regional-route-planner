@@ -200,6 +200,15 @@ function linhaEhDado(texto: string): boolean {
   if (/total de registros|assinatura|emitido em/.test(t)) return false;
   return RE_RODOVIA.test(texto) || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(texto) || /\bkm\b/i.test(texto);
 }
+/** Um valor só é texto útil se não for apenas números, datas e quilometragens. */
+function textoUtil(valor: string): boolean {
+  const semNumeros = valor
+    .replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, " ")
+    .replace(/\b\d{1,4}[.,]\d{1,3}\b/g, " ")
+    .replace(/[\d\s.,;/-]/g, "");
+  return semNumeros.length >= 2;
+}
+
 
 /**
  * Extração por âncoras: usa a ordem natural da linha da programação
