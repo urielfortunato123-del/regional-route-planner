@@ -167,7 +167,7 @@ export const criarImportacao = createServerFn({ method: "POST" })
     for (let i = 0; i < linhas.length; i += 400) {
       const { error } = await supabaseAdmin
         .from("importacao_registros")
-        .insert(linhas.slice(i, i + 400));
+        .insert(linhas.slice(i, i + 400) as never);
       if (error) throw new Error(error.message);
     }
 
@@ -290,7 +290,7 @@ export const editarRegistroImportacao = createServerFn({ method: "POST" })
         motivos,
         campos_corrigidos: [...corrigidos],
         foi_corrigido: corrigidos.size > 0,
-      })
+      } as never)
       .eq("id", data.registroId);
     if (error) throw new Error(error.message);
 
@@ -398,7 +398,7 @@ export const acaoRegistroImportacao = createServerFn({ method: "POST" })
         motivos,
         campos_corrigidos: [],
         foi_corrigido: false,
-      })
+      } as never)
       .eq("id", data.registroId);
     if (error) throw new Error(error.message);
     await recalcularTotais(registro.importacao_id);
@@ -685,7 +685,7 @@ export const duplicarImportacao = createServerFn({ method: "POST" })
     for (let i = 0; i < copias.length; i += 400) {
       const { error: erroCopia } = await supabaseAdmin
         .from("importacao_registros")
-        .insert(copias.slice(i, i + 400));
+        .insert(copias.slice(i, i + 400) as never);
       if (erroCopia) throw new Error(erroCopia.message);
     }
     await recalcularTotais(nova.id);

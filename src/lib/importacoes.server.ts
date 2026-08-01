@@ -32,24 +32,24 @@ export const COLUNAS_REGISTRO_IMPORTACAO =
   "id, importacao_id, regional_id, regional_codigo, regional_confirmada, regional_origem, pagina_pdf, texto_original, valores_extraidos, equipe, funcionario, categoria, contrato, atividade, rodovia, km_inicial, km_final, descricao, data_inicial, data_final, medicao, observacao, chave_duplicidade, duplicado, status_validacao, motivos, campos_corrigidos, foi_corrigido, programacao_id";
 
 export type CamposRegistro = {
-  regional_codigo?: string | null;
-  equipe?: string | null;
-  funcionario?: string | null;
-  categoria?: string | null;
-  contrato?: string | null;
-  atividade?: string | null;
-  rodovia?: string | null;
-  km_inicial?: number | null;
-  km_final?: number | null;
-  descricao?: string | null;
-  data_inicial?: string | null;
-  data_final?: string | null;
-  medicao?: string | null;
-  observacao?: string | null;
+  regional_codigo?: string | null | undefined;
+  equipe?: string | null | undefined;
+  funcionario?: string | null | undefined;
+  categoria?: string | null | undefined;
+  contrato?: string | null | undefined;
+  atividade?: string | null | undefined;
+  rodovia?: string | null | undefined;
+  km_inicial?: number | null | undefined;
+  km_final?: number | null | undefined;
+  descricao?: string | null | undefined;
+  data_inicial?: string | null | undefined;
+  data_final?: string | null | undefined;
+  medicao?: string | null | undefined;
+  observacao?: string | null | undefined;
 };
 
 /** Diz se a linha lida pode virar programação oficial e por quê não. */
-export function avaliarRegistro(r: CamposRegistro & { duplicado?: boolean }) {
+export function avaliarRegistro(r: CamposRegistro & { duplicado?: boolean | undefined }) {
   const motivos: string[] = [];
   if (!r.regional_codigo) motivos.push("Regional não identificada");
   if (!r.rodovia) motivos.push("Rodovia não identificada");
