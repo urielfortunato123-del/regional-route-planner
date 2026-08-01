@@ -123,7 +123,7 @@ function AuditoriaPagina() {
   const importacao = auditoria.data?.importacao;
 
   return (
-    <AppShell titulo="Auditoria da importação" regional={perfil.regional_rotulo}>
+    <AppShell perfil={perfil} titulo="Auditoria da importação">
       <div className="space-y-4 pb-24">
         <Cartao>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -171,7 +171,7 @@ function AuditoriaPagina() {
           {auditoria.data?.porRegional.length ? (
             <div className="mt-3 flex flex-wrap gap-2">
               {auditoria.data.porRegional.map((r) => (
-                <Etiqueta key={r.codigo} tom={r.codigo === perfil.regional_codigo ? "sucesso" : "neutro"}>
+                <Etiqueta key={r.codigo} tom={r.codigo === perfil.regional_codigo ? "ok" : "neutro"}>
                   {r.codigo}: {r.total}
                 </Etiqueta>
               ))}
