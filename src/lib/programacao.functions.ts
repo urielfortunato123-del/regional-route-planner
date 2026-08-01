@@ -565,6 +565,8 @@ export const salvarRota = createServerFn({ method: "POST" })
       .object({
         funcionarioId: z.string().uuid(),
         rotaId: z.string().uuid().nullable().optional(),
+        importacaoId: z.string().uuid().nullable().optional(),
+        situacao: z.enum(["rascunho", "ativa"]).default("ativa"),
         tipo: z.enum(["sugerida", "manual"]),
         data: z.string().min(8),
         pontoInicial: z
@@ -586,6 +588,7 @@ export const salvarRota = createServerFn({ method: "POST" })
               latitude: z.number(),
               longitude: z.number(),
               distanciaAnterior: z.number().nullable().optional(),
+              tempoAnterior: z.number().int().nullable().optional(),
             }),
           )
           .min(1)
@@ -638,7 +641,8 @@ export const salvarRota = createServerFn({ method: "POST" })
       ponto_inicial: data.pontoInicial,
       distancia_total: data.distanciaTotal ?? null,
       tempo_estimado: data.tempoEstimado ?? null,
-      status: "ativa" as const,
+      importacao_id: data.importacaoId ?? null,
+      status: data.situacao,
     };
 
     let rotaId = data.rotaId ?? null;
@@ -669,6 +673,7 @@ export const salvarRota = createServerFn({ method: "POST" })
         latitude: i.latitude,
         longitude: i.longitude,
         distancia_anterior: i.distanciaAnterior ?? null,
+        tempo_anterior: i.tempoAnterior ?? null,
       })),
     );
     if (erroItens) throw new Error(erroItens.message);
@@ -693,7 +698,7 @@ export const listarRotas = createServerFn({ method: "POST" })
     const { data: rotas, error } = await supabaseAdmin
       .from("rotas")
       .select(
-        "id, data, tipo, status, distancia_total, tempo_estimado, ponto_inicial, usuario_nome, criado_em, rota_itens(id, ordem, rotulo, latitude, longitude, programacao_id, status)",
+        "id, data, tipo, status, distancia_total, tempo_estimado, ponto_inicial, usuario_nome, criado_em, importacao_id, rota_itens(id, ordem, rotulo, latitude, longitude, programacao_id, status, distancia_anterior, tempo_anterior)",
       )
       .eq("regional_id", perfil.regional_id)
       .order("criado_em", { ascending: false })
