@@ -320,6 +320,8 @@ function MapaPagina() {
           rotulo: `${campo("rodovia")} • km ${String(campo("km_inicial") ?? "—").replace(".", ",")}`,
           detalhe: [campo("atividade"), campo("equipe"), campo("descricao")].filter(Boolean).join(" — ").slice(0, 180),
           status: String(campo("status") ?? "pendente"),
+          regionalCodigo: campo("regional_codigo") ? String(campo("regional_codigo")) : null,
+          regionalConfirmada: Boolean(campo("regional_confirmada")),
           trecho,
         });
       } else {
@@ -400,32 +402,83 @@ function MapaPagina() {
     );
   }
 
-  function gerarRota() {
+  /**
+   * Rota inteligente: parte da posição atual (GPS), escolhe o ponto de acesso
+   * de cada trecho e mede o percurso pela malha viária (OSRM). Só entram
+   * serviços da regional do funcionário.
+   */
+  async function gerarRota() {
+    if (!perfil) return;
     const base = servicos.filter((s) => selecionados.includes(s.id));
-    const alvo = base.length > 0 ? base : servicos;
-    if (alvo.length < 2) {
-      toast.error("Selecione ao menos dois serviços localizados no mapa.");
+    const alvo = (base.length > 0 ? base : servicos).filter(
+      (s) => s.regionalCodigo === perfil.regional_codigo,
+    );
+    if (alvo.length < 1) {
+      toast.error("Selecione ao menos um serviço posicionado da sua regional.");
       return;
     }
-    const restantes = [...alvo];
-    const ordenada: ServicoLocalizado[] = [];
-    let atual = posicao ?? { lat: restantes[0]!.trecho.inicio.lat, lon: restantes[0]!.trecho.inicio.lon };
-    while (restantes.length) {
-      let melhor = 0;
-      let melhorDist = Number.POSITIVE_INFINITY;
-      restantes.forEach((s, i) => {
-        const d = distanciaMetros(atual, { lat: s.trecho.inicio.lat, lon: s.trecho.inicio.lon });
-        if (d < melhorDist) {
-          melhorDist = d;
-          melhor = i;
-        }
+    const origem = posicao ?? {
+      lat: alvo[0]!.trecho.inicio.lat,
+      lon: alvo[0]!.trecho.inicio.lon,
+    };
+    setGerandoRota(true);
+    try {
+      const calculada = await gerarRotaInteligente({
+        itens: alvo,
+        origem: { lat: origem.lat, lon: origem.lon },
+        acessosFixos: Object.fromEntries(
+          Object.entries(acessos).map(([id, a]) => [
+            id,
+            { itemId: id, tipo: a.tipo, lat: a.lat, lon: a.lon, km: a.km, rotulo: a.rotulo },
+          ]),
+        ),
+        otimizarOrdem: true,
       });
-      const escolhido = restantes.splice(melhor, 1)[0]!;
-      ordenada.push(escolhido);
-      atual = { lat: escolhido.trecho.fim.lat, lon: escolhido.trecho.fim.lon };
+      setRota(calculada);
+      toast.success(
+        calculada.pelaEstrada
+          ? `Rota sugerida: ${calculada.paradas.length} trecho(s), ${calculada.distanciaTotalKm.toFixed(1)} km pela estrada.`
+          : `Rota sugerida com distância aproximada — ${calculada.motivo ?? "serviço de rotas indisponível"}.`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível gerar a rota.");
+    } finally {
+      setGerandoRota(false);
     }
-    setRota(ordenada);
-    toast.success(`Roteiro sugerido com ${ordenada.length} paradas.`);
+  }
+
+  function escolherAcesso(item: ServicoLocalizado, acesso: PontoAcesso) {
+    setAcessos((a) => ({ ...a, [item.id]: acesso }));
+    setFoco({ lat: acesso.lat, lon: acesso.lon, zoom: 16, chave: `acesso-${item.id}-${Date.now()}` });
+    toast.success(`Acesso definido: ${acesso.rotulo}`);
+  }
+
+  function abrirFormulario(tipo: "inspecao" | "ocorrencia", item?: ServicoLocalizado) {
+    const acesso = item ? acessos[item.id] : null;
+    const ponto = item
+      ? (acesso ?? { lat: item.trecho.inicio.lat, lon: item.trecho.inicio.lon })
+      : (pontoClicado ?? posicao);
+    if (!ponto) {
+      toast.error("Toque em um ponto do mapa ou ative o GPS para registrar.");
+      return;
+    }
+    setFormulario({
+      tipo,
+      contexto: {
+        programacaoId: item?.id ?? null,
+        rodovia: item?.trecho.rodoviaSolicitada ?? rodoviaDer?.rodovia.codigo ?? null,
+        kmInicial: item?.trecho.kmInicial ?? rodoviaDer?.km ?? marcoDer?.km ?? null,
+        kmFinal: item?.trecho.kmFinal ?? null,
+        atividade: item?.detalhe.split(" — ")[0] ?? null,
+        equipe: null,
+        contrato: null,
+        lat: ponto.lat,
+        lon: ponto.lon,
+        rotulo: item
+          ? item.rotulo
+          : `Ponto ${ponto.lat.toFixed(5)}, ${ponto.lon.toFixed(5)}`,
+      },
+    });
   }
 
   const marcadores = useMemo<MarcadorMapa[]>(() => {
