@@ -481,20 +481,84 @@ function MapaPagina() {
     });
   }
 
+  const servicosVisiveis = useMemo(
+    () => servicos.filter((s) => verConcluidos || s.status !== "concluido"),
+    [servicos, verConcluidos],
+  );
+
   const marcadores = useMemo<MarcadorMapa[]>(() => {
-    const lista: MarcadorMapa[] = servicos.map((s) => {
-      const ordem = rota?.findIndex((r) => r.id === s.id) ?? -1;
-      return {
-        id: s.id,
-        lat: s.trecho.inicio.lat,
-        lon: s.trecho.inicio.lon,
-        rotulo: s.rotulo,
-        detalhe: s.detalhe,
-        cor: CORES_STATUS[s.status] ?? "#dc2626",
-        ...(ordem >= 0 ? { numero: ordem + 1 } : {}),
-        destacado: selecionados.includes(s.id),
-      };
-    });
+    const lista: MarcadorMapa[] = [];
+
+    if (verTrechos) {
+      for (const s of servicosVisiveis) {
+        const ordem = rota?.paradas.find((p) => p.item.id === s.id)?.ordem ?? -1;
+        const cor = CORES_STATUS[s.status] ?? "#dc2626";
+        lista.push({
+          id: s.id,
+          lat: s.trecho.inicio.lat,
+          lon: s.trecho.inicio.lon,
+          rotulo: `${s.rotulo} — início`,
+          detalhe: s.detalhe,
+          cor,
+          ...(ordem > 0 ? { numero: ordem } : {}),
+          destacado: selecionados.includes(s.id),
+        });
+        if (
+          Math.abs(s.trecho.kmFinal - s.trecho.kmInicial) > 0.001 &&
+          (s.trecho.fim.lat !== s.trecho.inicio.lat || s.trecho.fim.lon !== s.trecho.inicio.lon)
+        ) {
+          lista.push({
+            id: `${s.id}-fim`,
+            lat: s.trecho.fim.lat,
+            lon: s.trecho.fim.lon,
+            rotulo: `${s.trecho.rodovia} km ${s.trecho.kmFinal.toFixed(3).replace(".", ",")} — fim`,
+            detalhe: s.detalhe,
+            cor,
+          });
+        }
+        const acesso = acessos[s.id];
+        if (acesso) {
+          lista.push({
+            id: `${s.id}-acesso`,
+            lat: acesso.lat,
+            lon: acesso.lon,
+            rotulo: `Acesso — ${s.rotulo}`,
+            detalhe: acesso.rotulo,
+            cor: "#0f766e",
+            destacado: true,
+          });
+        }
+      }
+    }
+
+    if (verInspecoes) {
+      for (const i of listaInspecoes) {
+        if (typeof i["latitude"] !== "number" || typeof i["longitude"] !== "number") continue;
+        lista.push({
+          id: `insp-${i["id"]}`,
+          lat: Number(i["latitude"]),
+          lon: Number(i["longitude"]),
+          rotulo: `Inspeção — ${i["rodovia"] ?? "sem rodovia"}`,
+          detalhe: `${i["condicao"] ?? ""} ${i["servico_executado"] ?? ""}`.trim(),
+          cor: "#7c3aed",
+        });
+      }
+    }
+
+    if (verOcorrencias) {
+      for (const o of listaOcorrencias) {
+        if (typeof o["latitude"] !== "number" || typeof o["longitude"] !== "number") continue;
+        lista.push({
+          id: `ocor-${o["id"]}`,
+          lat: Number(o["latitude"]),
+          lon: Number(o["longitude"]),
+          rotulo: `${o["tipo"]} — ${o["rodovia"] ?? "sem rodovia"}`,
+          detalhe: String(o["descricao"] ?? ""),
+          cor: CORES_OCORRENCIA[String(o["prioridade"] ?? "media")] ?? "#d97706",
+        });
+      }
+    }
+
     if (resultadoBusca) {
       lista.push({
         id: "busca",
@@ -517,29 +581,46 @@ function MapaPagina() {
       });
     }
     return lista;
-  }, [servicos, rota, selecionados, resultadoBusca, pontoClicado]);
+  }, [
+    servicosVisiveis,
+    rota,
+    selecionados,
+    acessos,
+    verTrechos,
+    verInspecoes,
+    verOcorrencias,
+    listaInspecoes,
+    listaOcorrencias,
+    resultadoBusca,
+    pontoClicado,
+  ]);
 
   const linhas = useMemo<LinhaMapa[]>(() => {
-    const saida: LinhaMapa[] = servicos
-      .filter((s) => s.trecho.linha.length > 1)
-      .map((s) => ({
-        id: `t-${s.id}`,
-        pontos: s.trecho.linha,
-        cor: CORES_STATUS[s.status] ?? "#dc2626",
-      }));
+    const saida: LinhaMapa[] = [];
+    if (verTrechos) {
+      for (const s of servicosVisiveis) {
+        if (s.trecho.linha.length > 1) {
+          saida.push({
+            id: `t-${s.id}`,
+            pontos: s.trecho.linha,
+            cor: CORES_STATUS[s.status] ?? "#dc2626",
+          });
+        }
+      }
+    }
     if (resultadoBusca && resultadoBusca.linha.length > 1) {
       saida.push({ id: "t-busca", pontos: resultadoBusca.linha, cor: "#7c3aed" });
     }
-    if (rota && rota.length > 1) {
+    if (verRota && rota && rota.geometria.length > 1) {
       saida.push({
         id: "rota",
-        pontos: rota.map((r) => ({ lat: r.trecho.inicio.lat, lon: r.trecho.inicio.lon })),
+        pontos: rota.geometria,
         cor: "#0ea5e9",
-        tracejada: true,
+        tracejada: !rota.pelaEstrada,
       });
     }
     return saida;
-  }, [servicos, resultadoBusca, rota]);
+  }, [servicosVisiveis, resultadoBusca, rota, verTrechos, verRota]);
 
   const camadasIndisponiveis =
     Boolean(areaConsulta) && !camadas.isLoading && (camadas.isError || camadas.data == null);
