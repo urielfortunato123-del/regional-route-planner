@@ -56,27 +56,60 @@ export function normalizarTexto(valor: string): string {
 }
 
 /**
- * Identifica a regional em um trecho de texto livre.
- * Aceita variações: "CGR.2 – Itapetininga", "CGR 2", "CGR.02",
- * "Itapetininga", "Regional 2", "DR-02", "C.G.R. 13".
+ * Ocorrências do código explícito da regional ("CGR.3", "CGR 03", "CGR-13").
+ * Tolerante a ponto, espaço, hífen, travessão e zero à esquerda.
  */
-export function detectarRegional(texto: string | null | undefined): string | null {
+function ocorrenciasCgr(textoNormalizado: string): Array<{ indice: number; codigo: string }> {
+  const achados: Array<{ indice: number; codigo: string }> = [];
+  const re = /\bc\s*\.?\s*g\s*\.?\s*r\s*\.?\s*[-–—.\s]{0,3}\s*0*(\d{1,2})\b/g;
+  for (const m of textoNormalizado.matchAll(re)) {
+    const encontrada = REGIONAIS.find((r) => r.numero === Number(m[1] ?? ""));
+    if (encontrada) achados.push({ indice: m.index ?? 0, codigo: encontrada.codigo });
+  }
+  return achados;
+}
+
+/**
+ * Regional da COLUNA REGIONAL de uma linha: exige o código explícito "CGR.n".
+ * Nunca usa título, cabeçalho da página ou nome do gerenciamento.
+ */
+export function detectarRegionalNaLinha(texto: string | null | undefined): string | null {
   if (!texto) return null;
   const t = normalizarTexto(texto);
   if (!t) return null;
+  const achados = ocorrenciasCgr(t).sort((a, b) => a.indice - b.indice);
+  return achados[0]?.codigo ?? null;
+}
 
-  // 1) Nome do município / apelidos textuais
+/**
+ * Identifica a regional em um trecho de texto livre.
+ * Aceita variações: "CGR.2 – Itapetininga", "CGR 2", "CGR.02",
+ * "Itapetininga", "Regional 2", "DR-02", "C.G.R. 13".
+ * O código "CGR.n" tem prioridade sobre o nome do município.
+ */
+export function detectarRegional(texto: string | null | undefined): string | null {
+  if (!texto) return null;
+  const explicito = detectarRegionalNaLinha(texto);
+  if (explicito) return explicito;
+
+  // remove trechos de gerenciamento/título, que não representam a regional da linha
+  const t = normalizarTexto(texto).replace(/gerenciamento[^\n]{0,40}/g, " ");
+  if (!t) return null;
+
+  // 1) Nome do município / apelidos textuais (o que aparecer primeiro)
+  let melhor: { indice: number; codigo: string } | null = null;
   for (const r of REGIONAIS) {
     for (const alias of r.aliases) {
-      if (t.includes(alias)) return r.codigo;
+      const i = t.indexOf(alias);
+      if (i >= 0 && (!melhor || i < melhor.indice)) melhor = { indice: i, codigo: r.codigo };
     }
   }
+  if (melhor) return melhor.codigo;
 
-  // 2) Códigos numéricos: cgr / c.g.r / dr / regional seguido de número
+  // 2) Outros códigos numéricos
   const padroes = [
-    /\bc\.?\s?g\.?\s?r\.?\s*[-–.\s]?\s*(\d{1,2})\b/,
-    /\bd\.?\s?r\.?\s*[-–.\s]?\s*(\d{1,2})\b/,
-    /\bregional\s*[-–.\s]?\s*(\d{1,2})\b/,
+    /\bd\.?\s?r\.?\s*[-–.\s]?\s*0*(\d{1,2})\b/,
+    /\bregional\s*[-–.\s]?\s*0*(\d{1,2})\b/,
   ];
   for (const padrao of padroes) {
     const m = t.match(padrao);
@@ -89,6 +122,7 @@ export function detectarRegional(texto: string | null | undefined): string | nul
 
   return null;
 }
+
 
 /** Converte "302,900" / "302.900" / "KM 328+700" em número de km. */
 export function parseKm(valor: string | null | undefined): number | null {
