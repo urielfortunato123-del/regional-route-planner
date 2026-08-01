@@ -492,7 +492,7 @@ function AuditoriaPagina() {
                       {r.data_final && r.data_final !== r.data_inicial ? ` a ${r.data_final}` : ""}
                     </td>
                     <td className="p-2">
-                      <Etiqueta tom={r.data_fora_periodo ? "erro" : r.status_conferencia === "OK" ? "ok" : "aviso"}>
+                      <Etiqueta tom={r.data_fora_periodo ? "erro" : r.status_conferencia === "OK" ? "ok" : "alerta"}>
                         {r.data_fora_periodo ? "DATA FORA DO PERÍODO" : r.status_conferencia}
                       </Etiqueta>
                     </td>
