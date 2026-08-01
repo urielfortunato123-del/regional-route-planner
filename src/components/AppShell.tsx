@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from "react";
 import {
   CalendarRange,
   CloudOff,
+  History,
   Home,
   Map,
   RefreshCw,
@@ -118,6 +119,7 @@ const itensMenu = [
   { para: "/programacao", rotulo: "Programação", icone: CalendarRange },
   { para: "/mapa", rotulo: "Mapa", icone: Map },
   { para: "/rota", rotulo: "Rota", icone: RouteIcon },
+  { para: "/importacoes", rotulo: "Importações", icone: History },
   { para: "/configuracoes", rotulo: "Ajustes", icone: Settings },
 ] as const;
 
