@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, Filter, MapPin, Search } from "lucide-react";
 
 import { AppShell, Botao, Cartao, Etiqueta, estiloEntrada } from "@/components/AppShell";
 import { Identificacao } from "@/components/Identificacao";
 import { usePerfilLocal } from "@/lib/perfil-local";
-import { atualizarStatus, listarProgramacoes, listarRegionais } from "@/lib/programacao.functions";
+import { atualizarStatus, listarProgramacoes } from "@/lib/programacao.functions";
+import { guardarProgramacoes, lerProgramacoes, registrarFiscalizacao } from "@/lib/offline/db";
+import { enfileirar } from "@/lib/offline/sync";
 
 export const Route = createFileRoute("/programacao/")({
   head: () => ({
@@ -86,15 +88,38 @@ function ProgramacaoPagina() {
   });
 
   const mudarStatus = useMutation({
-    mutationFn: (v: { id: string; status: "concluido" | "na_rota" | "pendente"; assumir?: boolean }) =>
-      atualizarStatus({
-        data: {
-          funcionarioId: perfil!.id,
-          programacaoId: v.id,
-          status: v.status,
-          assumir: v.assumir ?? false,
-        },
-      }),
+    mutationFn: async (v: {
+      id: string;
+      status: "concluido" | "na_rota" | "pendente";
+      assumir?: boolean;
+    }) => {
+      const payload = {
+        funcionarioId: perfil!.id,
+        programacaoId: v.id,
+        status: v.status,
+        assumir: v.assumir ?? false,
+      };
+      await registrarFiscalizacao({
+        regional_codigo: perfil!.regional_codigo,
+        programacao_id: v.id,
+        status: v.status,
+        observacao: null,
+        latitude: null,
+        longitude: null,
+        criadoEm: Date.now(),
+        sincronizado: 0,
+      });
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await enfileirar({
+          regional_codigo: perfil!.regional_codigo,
+          tipo: "status",
+          payload,
+          descricao: `Situação: ${v.status}`,
+        });
+        return;
+      }
+      await atualizarStatus({ data: payload });
+    },
     onSuccess: () => {
       toast.success("Situação atualizada.");
       cliente.invalidateQueries({ queryKey: ["programacoes"] });
@@ -106,7 +131,24 @@ function ProgramacaoPagina() {
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
 
-  const registros = consulta.data?.registros ?? [];
+  const [cache, setCache] = useState<Array<Record<string, never>>>([]);
+
+  // Espelho local: a lista continua visível em campo, sem sinal.
+  useEffect(() => {
+    if (!perfil) return;
+    if (consulta.data?.registros) {
+      void guardarProgramacoes(
+        perfil.regional_codigo,
+        consulta.data.registros as unknown as Array<Record<string, unknown>>,
+      );
+    } else if (consulta.isError) {
+      void lerProgramacoes(perfil.regional_codigo).then((r) =>
+        setCache(r as unknown as Array<Record<string, never>>),
+      );
+    }
+  }, [consulta.data, consulta.isError, perfil]);
+
+  const registros = consulta.data?.registros ?? (cache as unknown as never[]);
 
   return (
     <AppShell perfil={perfil} titulo="Programação">
