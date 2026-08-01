@@ -10,33 +10,68 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as ProgramacaoIndexRouteImport } from './routes/programacao.index'
+import { Route as ProgramacaoImportarRouteImport } from './routes/programacao.importar'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProgramacaoIndexRoute = ProgramacaoIndexRouteImport.update({
+  id: '/programacao/',
+  path: '/programacao/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProgramacaoImportarRoute = ProgramacaoImportarRouteImport.update({
+  id: '/programacao/importar',
+  path: '/programacao/importar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/programacao/importar': typeof ProgramacaoImportarRoute
+  '/programacao/': typeof ProgramacaoIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/programacao/importar': typeof ProgramacaoImportarRoute
+  '/programacao': typeof ProgramacaoIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/programacao/importar': typeof ProgramacaoImportarRoute
+  '/programacao/': typeof ProgramacaoIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/configuracoes' | '/programacao/importar' | '/programacao/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/configuracoes' | '/programacao/importar' | '/programacao'
+  id:
+    | '__root__'
+    | '/'
+    | '/configuracoes'
+    | '/programacao/importar'
+    | '/programacao/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ConfiguracoesRoute: typeof ConfiguracoesRoute
+  ProgramacaoImportarRoute: typeof ProgramacaoImportarRoute
+  ProgramacaoIndexRoute: typeof ProgramacaoIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,22 +83,36 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/configuracoes': {
+      id: '/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/programacao/': {
+      id: '/programacao/'
+      path: '/programacao'
+      fullPath: '/programacao/'
+      preLoaderRoute: typeof ProgramacaoIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/programacao/importar': {
+      id: '/programacao/importar'
+      path: '/programacao/importar'
+      fullPath: '/programacao/importar'
+      preLoaderRoute: typeof ProgramacaoImportarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ConfiguracoesRoute: ConfiguracoesRoute,
+  ProgramacaoImportarRoute: ProgramacaoImportarRoute,
+  ProgramacaoIndexRoute: ProgramacaoIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
