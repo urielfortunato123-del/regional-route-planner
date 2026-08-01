@@ -435,6 +435,7 @@ export async function lerProgramacaoPdf(
       if (!linhaEhDado(texto)) {
         // continuação de célula (descrição/observação quebrada em várias linhas)
         const anterior = registros[registros.length - 1];
+        let motivo = "Linha sem rodovia, km ou data (texto auxiliar)";
         if (anterior && linha && colunas && anterior.pagina_pdf === numeroPagina) {
           const partes = distribuirEmColunas(linha, colunas);
           // y maior significa acima na página: o fragmento vem antes do texto já lido
@@ -442,6 +443,7 @@ export async function lerProgramacaoPdf(
           for (const campo of ["descricao", "observacao"] as const) {
             const valor = partes[campo];
             if (valor && textoUtil(valor)) {
+              motivo = "Continuação da linha anterior (descrição/observação)";
               const atual = anterior[campo];
               anterior[campo] = atual
                 ? acima
@@ -451,6 +453,14 @@ export async function lerProgramacaoPdf(
             }
           }
         }
+        diagnostico.push({
+          pagina: numeroPagina,
+          linha: numeroLinha,
+          texto,
+          regional: null,
+          status: "ignorada",
+          motivo,
+        });
         continue;
       }
 
