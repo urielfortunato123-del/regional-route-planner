@@ -38,7 +38,13 @@ export const criarImportacao = createServerFn({ method: "POST" })
               observacao: z.string().nullable(),
               pagina_pdf: z.number().int(),
               linha_bruta: z.string().nullable(),
+              status_conferencia: z.string().nullable().optional(),
+              motivo_conferencia: z.string().nullable().optional(),
+              data_fora_periodo: z.boolean().optional(),
+              periodo_inicio_esperado: z.string().nullable().optional(),
+              periodo_fim_esperado: z.string().nullable().optional(),
             }),
+
           )
           .min(1)
           .max(5000),
