@@ -274,6 +274,9 @@ export const listarProgramacoes = createServerFn({ method: "POST" })
       const fim = new Date(hoje.getTime() + 7 * 86400000);
       consulta = consulta.lte("data_inicial", iso(fim)).gte("data_final", iso(hoje));
     }
+    if (data.visao === "dia" && data.dia) {
+      consulta = consulta.lte("data_inicial", data.dia).gte("data_final", data.dia);
+    }
     if (data.visao === "concluidas") consulta = consulta.eq("status", "concluido");
     if (data.visao === "pendentes") consulta = consulta.neq("status", "concluido");
 
