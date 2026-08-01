@@ -147,39 +147,41 @@ export async function gerarRotaInteligente(opcoes: {
   const sequencia: Array<{ item: TrechoProgramado; acesso: PontoAcesso; saida: LatLon }> = [];
   let atual: LatLon = origem;
 
-  while (restantes.length) {
-    let escolhidoIdx = 0;
-    let escolhidoAcesso: PontoAcesso | null = null;
-    let menor = Number.POSITIVE_INFINITY;
+  const acessoEscolhido = (item: TrechoProgramado, de: LatLon): PontoAcesso => {
+    const fixo = fixos[item.id];
+    if (fixo) return { tipo: fixo.tipo, rotulo: fixo.rotulo, lat: fixo.lat, lon: fixo.lon, km: fixo.km };
+    const opcoesAcesso = acessosDoTrecho(item, de);
+    let melhor = opcoesAcesso[0]!;
+    let menorDistancia = distanciaMetros(de, melhor);
+    for (const acesso of opcoesAcesso.slice(1)) {
+      const d = distanciaMetros(de, acesso);
+      if (d < menorDistancia) {
+        menorDistancia = d;
+        melhor = acesso;
+      }
+    }
+    return melhor;
+  };
 
-    restantes.forEach((item, i) => {
-      const fixo = fixos[item.id];
-      const opcoesAcesso: PontoAcesso[] = fixo
-        ? [{ tipo: fixo.tipo, rotulo: fixo.rotulo, lat: fixo.lat, lon: fixo.lon, km: fixo.km }]
-        : acessosDoTrecho(item, atual);
-      for (const acesso of opcoesAcesso) {
-        const d = distanciaMetros(atual, acesso);
+  while (restantes.length) {
+    let indice = 0;
+    if (otimizar) {
+      let menor = Number.POSITIVE_INFINITY;
+      restantes.forEach((item, i) => {
+        const d = distanciaMetros(atual, acessoEscolhido(item, atual));
         if (d < menor) {
           menor = d;
-          escolhidoIdx = i;
-          escolhidoAcesso = acesso;
+          indice = i;
         }
-      }
-      if (!otimizar && i === 0) {
-        // ordem manual: mantém a sequência recebida
-        menor = -1;
-        escolhidoIdx = 0;
-        escolhidoAcesso = opcoesAcesso[0] ?? null;
-      }
-    });
-
-    const item = restantes.splice(escolhidoIdx, 1)[0]!;
-    const acesso: PontoAcesso =
-      escolhidoAcesso ?? (acessosDoTrecho(item, atual)[0] as PontoAcesso);
+      });
+    }
+    const item = restantes.splice(indice, 1)[0]!;
+    const acesso = acessoEscolhido(item, atual);
     const saida = saidaDoTrecho(item, acesso);
     sequencia.push({ item, acesso, saida });
     atual = saida;
   }
+
 
   const pontos: LatLon[] = [origem];
   for (const s of sequencia) {
