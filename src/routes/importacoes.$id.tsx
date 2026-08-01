@@ -60,6 +60,8 @@ type Registro = {
   duplicado: boolean | null;
   status_validacao: string;
   motivos: string[] | null;
+  programacao_id?: string | null;
+
   foi_corrigido: boolean | null;
 };
 
@@ -135,17 +137,19 @@ function ConferenciaPagina() {
   const confirmar = useMutation({
     mutationFn: () =>
       confirmarImportacao({
-        data: { funcionarioId: perfil!.id, importacaoId: id, somenteValidos: true },
+        data: { funcionarioId: perfil!.id, importacaoId: id, somenteValidos: false },
       }),
     onSuccess: (r) => {
       toast.success(
-        `${r.inseridos} serviço(s) liberados para a programação${r.pendentes ? `; ${r.pendentes} ainda em conferência` : ""}.`,
+        `${r.inseridos} serviço(s) salvos na programação${r.incompletos ? ` (${r.incompletos} ainda precisam de ajuste)` : ""}${r.pendentes ? `; ${r.pendentes} sem regional continuam em conferência` : ""}.`,
       );
       recarregar();
-      if (!r.pendentes) void navegar({ to: "/rota" });
+      void fila.invalidateQueries();
+      if (r.inseridos > 0) void navegar({ to: "/programacao" });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const novaVersao = useMutation({
     mutationFn: () => duplicarImportacao({ data: { funcionarioId: perfil!.id, importacaoId: id } }),
@@ -188,6 +192,10 @@ function ConferenciaPagina() {
   ).length;
   const validos = registros.filter((r) => r.status_validacao === "valido").length;
   const jaConfirmados = registros.filter((r) => r.status_validacao === "confirmado").length;
+  const aSalvar = registros.filter(
+    (r) => r.status_validacao !== "rejeitado" && !r.programacao_id && !!r.regional_codigo,
+  ).length;
+
 
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
@@ -224,10 +232,11 @@ function ConferenciaPagina() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Botao disabled={confirmar.isPending || validos === 0} onClick={() => confirmar.mutate()}>
+              <Botao disabled={confirmar.isPending || aSalvar === 0} onClick={() => confirmar.mutate()}>
                 <CheckCircle2 className="size-4" />
-                {confirmar.isPending ? "Liberando..." : `Confirmar ${validos} linha(s)`}
+                {confirmar.isPending ? "Salvando..." : `Salvar ${aSalvar} serviço(s) na programação`}
               </Botao>
+
               <Botao variante="contorno" onClick={() => abrirPdf.mutate()}>
                 <FileDown className="size-4" /> Ver PDF original
               </Botao>

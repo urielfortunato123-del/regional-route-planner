@@ -50,7 +50,7 @@ function ProgramacaoPagina() {
   const { perfil, carregado, salvar } = usePerfilLocal();
   const cliente = useQueryClient();
 
-  const [visao, setVisao] = useState<Visao>("hoje");
+  const [visao, setVisao] = useState<Visao>("todas");
   const [somenteMeus, setSomenteMeus] = useState(false);
   const [busca, setBusca] = useState("");
   const [rodovia, setRodovia] = useState("");

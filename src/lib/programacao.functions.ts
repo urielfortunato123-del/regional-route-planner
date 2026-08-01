@@ -296,6 +296,7 @@ export const listarProgramacoes = createServerFn({ method: "POST" })
     const { data: registros, error } = await consulta
       .order("data_inicial", { ascending: true })
       .order("rodovia", { ascending: true })
+      .order("km_inicial", { ascending: true })
       .limit(1000);
     if (error) throw new Error(error.message);
 

@@ -434,16 +434,21 @@ export const confirmarImportacao = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     const todos = registros ?? [];
-    const validos = todos.filter(
-      (r) => r.status_validacao === "valido" && !r.programacao_id && r.regional_id,
+    // Nada se perde: toda linha lida do PDF que tenha regional identificada vai
+    // para a programação. As que ainda precisam de conferência entram com
+    // situação "pendente" e continuam sinalizadas na tela de conferência.
+    const promoviveis = todos.filter(
+      (r) => r.status_validacao !== "rejeitado" && !r.programacao_id && r.regional_id,
     );
-    const pendentes = todos.filter((r) => r.status_validacao === "revisar" || r.status_validacao === "pendente");
-    if (!data.somenteValidos && pendentes.length) {
-      throw new Error("Existem registros pendentes de conferência.");
-    }
+    const semRegional = todos.filter(
+      (r) => r.status_validacao !== "rejeitado" && !r.programacao_id && !r.regional_id,
+    ).length;
+    const incompletos = promoviveis.filter(
+      (r) => r.status_validacao === "revisar" || r.status_validacao === "pendente",
+    ).length;
 
     let inseridos = 0;
-    for (const r of validos) {
+    for (const r of promoviveis) {
       const { data: criado, error: erroInsert } = await supabaseAdmin
         .from("programacoes")
         .insert({
@@ -476,12 +481,15 @@ export const confirmarImportacao = createServerFn({ method: "POST" })
       if (erroInsert) throw new Error(erroInsert.message);
       await supabaseAdmin
         .from("importacao_registros")
-        .update({ status_validacao: "confirmado", programacao_id: criado.id })
+        .update({
+          status_validacao: r.status_validacao === "valido" ? "confirmado" : r.status_validacao,
+          programacao_id: criado.id,
+        })
         .eq("id", r.id);
       inseridos += 1;
     }
 
-    const restantes = pendentes.length;
+    const restantes = semRegional;
     const status =
       restantes > 0
         ? inseridos > 0
@@ -499,8 +507,9 @@ export const confirmarImportacao = createServerFn({ method: "POST" })
       .eq("id", data.importacaoId);
     await recalcularTotais(data.importacaoId);
 
-    return { ok: true, inseridos, pendentes: restantes, status };
+    return { ok: true, inseridos, pendentes: restantes, incompletos, status };
   });
+
 
 export const atualizarStatusImportacao = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>

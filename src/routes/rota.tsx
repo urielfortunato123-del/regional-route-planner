@@ -94,7 +94,7 @@ function RotaPagina() {
   const { perfil, carregado, salvar } = usePerfilLocal();
   const cliente = useQueryClient();
 
-  const [visao, setVisao] = useState<"hoje" | "amanha" | "semana" | "dia">("hoje");
+  const [visao, setVisao] = useState<"hoje" | "amanha" | "semana" | "dia" | "todas">("todas");
   const [dia, setDia] = useState<string>("");
   const [percurso, setPercurso] = useState<Percurso | null>(null);
   const [calculando, setCalculando] = useState(false);
@@ -617,6 +617,7 @@ function RotaPagina() {
             <option value="hoje">Serviços de hoje</option>
             <option value="amanha">Serviços de amanhã</option>
             <option value="semana">Próximos 7 dias</option>
+            <option value="todas">Todos os serviços da regional</option>
             <option value="dia">Dia escolhido</option>
           </select>
 

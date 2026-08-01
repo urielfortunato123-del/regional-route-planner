@@ -148,7 +148,7 @@ function usePosicao() {
 function MapaPagina() {
   const { perfil, carregado, salvar } = usePerfilLocal();
 
-  const [visao, setVisao] = useState<"hoje" | "amanha" | "semana">("hoje");
+  const [visao, setVisao] = useState<"hoje" | "amanha" | "semana" | "todas">("todas");
   const [rodoviaBusca, setRodoviaBusca] = useState("");
   const [kmInicial, setKmInicial] = useState("");
   const [kmFinal, setKmFinal] = useState("");
@@ -1138,7 +1138,7 @@ function MapaPagina() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-base font-semibold">Programação no mapa</h2>
             <div className="flex gap-1">
-              {(["hoje", "amanha", "semana"] as const).map((v) => (
+              {(["hoje", "amanha", "semana", "todas"] as const).map((v) => (
                 <button
                   key={v}
                   onClick={() => setVisao(v)}
@@ -1146,7 +1146,7 @@ function MapaPagina() {
                     visao === v ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {v === "hoje" ? "Hoje" : v === "amanha" ? "Amanhã" : "Semana"}
+                  {v === "hoje" ? "Hoje" : v === "amanha" ? "Amanhã" : v === "semana" ? "Semana" : "Todas"}
                 </button>
               ))}
             </div>
