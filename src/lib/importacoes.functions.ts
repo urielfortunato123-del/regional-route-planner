@@ -263,7 +263,8 @@ export const editarRegistroImportacao = createServerFn({ method: "POST" })
       COLUNAS_REGISTRO_IMPORTACAO,
     } = await import("@/lib/importacoes.server");
 
-    await carregarPerfil(data.funcionarioId);
+    const perfil = await carregarPerfil(data.funcionarioId);
+
     const { data: atual, error: erroBusca } = await supabaseAdmin
       .from("importacao_registros")
       .select(COLUNAS_REGISTRO_IMPORTACAO)
