@@ -248,6 +248,7 @@ export type Database = {
           nome_arquivo: string
           periodo_fim: string | null
           periodo_inicio: string | null
+          programacao_versao: number
           regionais_encontradas: string[]
           regional_origem_id: string | null
           status: string
@@ -256,6 +257,8 @@ export type Database = {
           total_erros: number
           total_paginas: number | null
           total_registros: number
+          ultima_validacao: Json | null
+          ultima_validacao_em: string | null
           usuario_id: string | null
           usuario_nome: string | null
           versao: number
@@ -272,6 +275,7 @@ export type Database = {
           nome_arquivo: string
           periodo_fim?: string | null
           periodo_inicio?: string | null
+          programacao_versao?: number
           regionais_encontradas?: string[]
           regional_origem_id?: string | null
           status?: string
@@ -280,6 +284,8 @@ export type Database = {
           total_erros?: number
           total_paginas?: number | null
           total_registros?: number
+          ultima_validacao?: Json | null
+          ultima_validacao_em?: string | null
           usuario_id?: string | null
           usuario_nome?: string | null
           versao?: number
@@ -296,6 +302,7 @@ export type Database = {
           nome_arquivo?: string
           periodo_fim?: string | null
           periodo_inicio?: string | null
+          programacao_versao?: number
           regionais_encontradas?: string[]
           regional_origem_id?: string | null
           status?: string
@@ -304,6 +311,8 @@ export type Database = {
           total_erros?: number
           total_paginas?: number | null
           total_registros?: number
+          ultima_validacao?: Json | null
+          ultima_validacao_em?: string | null
           usuario_id?: string | null
           usuario_nome?: string | null
           versao?: number
@@ -614,13 +623,20 @@ export type Database = {
           atualizado_em: string
           categoria: string | null
           chave_duplicidade: string | null
+          conferido_em: string | null
           contrato: string | null
           criado_em: string
           data_final: string | null
           data_inicial: string | null
           descricao: string | null
           equipe: string | null
+          extraido_em: string | null
           funcionario: string | null
+          geometria: Json | null
+          geometria_erro: string | null
+          geometria_fonte: string | null
+          geometria_precisao: string | null
+          geometria_processada_em: string | null
           id: string
           importacao_id: string | null
           importacao_registro_id: string | null
@@ -636,12 +652,15 @@ export type Database = {
           medicao: string | null
           observacao: string | null
           pagina_pdf: number | null
+          persistido_em: string
           regional_codigo: string | null
           regional_confirmada: boolean
           regional_id: string | null
           regional_origem: string | null
           rodovia: string | null
           status: string
+          status_geometria: string
+          ultima_validacao_em: string | null
         }
         Insert: {
           arquivo_id?: string | null
@@ -651,13 +670,20 @@ export type Database = {
           atualizado_em?: string
           categoria?: string | null
           chave_duplicidade?: string | null
+          conferido_em?: string | null
           contrato?: string | null
           criado_em?: string
           data_final?: string | null
           data_inicial?: string | null
           descricao?: string | null
           equipe?: string | null
+          extraido_em?: string | null
           funcionario?: string | null
+          geometria?: Json | null
+          geometria_erro?: string | null
+          geometria_fonte?: string | null
+          geometria_precisao?: string | null
+          geometria_processada_em?: string | null
           id?: string
           importacao_id?: string | null
           importacao_registro_id?: string | null
@@ -673,12 +699,15 @@ export type Database = {
           medicao?: string | null
           observacao?: string | null
           pagina_pdf?: number | null
+          persistido_em?: string
           regional_codigo?: string | null
           regional_confirmada?: boolean
           regional_id?: string | null
           regional_origem?: string | null
           rodovia?: string | null
           status?: string
+          status_geometria?: string
+          ultima_validacao_em?: string | null
         }
         Update: {
           arquivo_id?: string | null
@@ -688,13 +717,20 @@ export type Database = {
           atualizado_em?: string
           categoria?: string | null
           chave_duplicidade?: string | null
+          conferido_em?: string | null
           contrato?: string | null
           criado_em?: string
           data_final?: string | null
           data_inicial?: string | null
           descricao?: string | null
           equipe?: string | null
+          extraido_em?: string | null
           funcionario?: string | null
+          geometria?: Json | null
+          geometria_erro?: string | null
+          geometria_fonte?: string | null
+          geometria_precisao?: string | null
+          geometria_processada_em?: string | null
           id?: string
           importacao_id?: string | null
           importacao_registro_id?: string | null
@@ -710,12 +746,15 @@ export type Database = {
           medicao?: string | null
           observacao?: string | null
           pagina_pdf?: number | null
+          persistido_em?: string
           regional_codigo?: string | null
           regional_confirmada?: boolean
           regional_id?: string | null
           regional_origem?: string | null
           rodovia?: string | null
           status?: string
+          status_geometria?: string
+          ultima_validacao_em?: string | null
         }
         Relationships: [
           {
@@ -845,55 +884,79 @@ export type Database = {
       }
       rotas: {
         Row: {
+          algoritmo_roteamento: string | null
           atualizado_em: string
           criado_em: string
           data: string
           distancia_total: number | null
           geometria: Json | null
+          gerada_em: string
           id: string
           importacao_id: string | null
+          origem_coordenadas: Json | null
+          origem_tipo: string | null
           ponto_final: Json | null
           ponto_inicial: Json | null
+          programacao_versao: number | null
+          quantidade_servicos: number
           regional_id: string
+          servicos_ids: string[]
           status: string
           tempo_estimado: number | null
           tipo: string
           usuario_id: string | null
           usuario_nome: string | null
+          versao_rota: number
         }
         Insert: {
+          algoritmo_roteamento?: string | null
           atualizado_em?: string
           criado_em?: string
           data?: string
           distancia_total?: number | null
           geometria?: Json | null
+          gerada_em?: string
           id?: string
           importacao_id?: string | null
+          origem_coordenadas?: Json | null
+          origem_tipo?: string | null
           ponto_final?: Json | null
           ponto_inicial?: Json | null
+          programacao_versao?: number | null
+          quantidade_servicos?: number
           regional_id: string
+          servicos_ids?: string[]
           status?: string
           tempo_estimado?: number | null
           tipo?: string
           usuario_id?: string | null
           usuario_nome?: string | null
+          versao_rota?: number
         }
         Update: {
+          algoritmo_roteamento?: string | null
           atualizado_em?: string
           criado_em?: string
           data?: string
           distancia_total?: number | null
           geometria?: Json | null
+          gerada_em?: string
           id?: string
           importacao_id?: string | null
+          origem_coordenadas?: Json | null
+          origem_tipo?: string | null
           ponto_final?: Json | null
           ponto_inicial?: Json | null
+          programacao_versao?: number | null
+          quantidade_servicos?: number
           regional_id?: string
+          servicos_ids?: string[]
           status?: string
           tempo_estimado?: number | null
           tipo?: string
           usuario_id?: string | null
           usuario_nome?: string | null
+          versao_rota?: number
         }
         Relationships: [
           {
