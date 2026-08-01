@@ -199,3 +199,206 @@ export async function municipioDoPonto(ponto: LatLon): Promise<string | null> {
     return null;
   }
 }
+
+// ---------------------------------------------------------------- camadas por área
+
+export type BBoxLatLon = { sul: number; oeste: number; norte: number; leste: number };
+
+export type LinhaDer = {
+  codigo: string;
+  nome: string | null;
+  classe: string | null;
+  pista: string | null;
+  extensao: number | null;
+  pontos: LatLon[];
+};
+
+export type MarcoAreaDer = { codigo: string; km: number; lat: number; lon: number };
+
+export type LimiteRegional = {
+  numero: number;
+  nome: string | null;
+  municipios: string[];
+  aneis: LatLon[][];
+  bbox: BBoxLatLon;
+};
+
+/** Reduz o número de vértices mantendo o traçado (economia de dados no celular). */
+function decimar(pontos: LatLon[], tolerancia: number): LatLon[] {
+  if (pontos.length <= 2) return pontos;
+  const saida: LatLon[] = [pontos[0]!];
+  for (let i = 1; i < pontos.length - 1; i++) {
+    const p = pontos[i]!;
+    const ultimo = saida[saida.length - 1]!;
+    if (Math.abs(p.lat - ultimo.lat) + Math.abs(p.lon - ultimo.lon) >= tolerancia) saida.push(p);
+  }
+  saida.push(pontos[pontos.length - 1]!);
+  return saida;
+}
+
+function envelopeDer(b: BBoxLatLon) {
+  const cantos = [
+    paraDer({ lat: b.sul, lon: b.oeste }),
+    paraDer({ lat: b.sul, lon: b.leste }),
+    paraDer({ lat: b.norte, lon: b.oeste }),
+    paraDer({ lat: b.norte, lon: b.leste }),
+  ];
+  return {
+    minx: Math.min(...cantos.map((c) => c.x)),
+    maxx: Math.max(...cantos.map((c) => c.x)),
+    miny: Math.min(...cantos.map((c) => c.y)),
+    maxy: Math.max(...cantos.map((c) => c.y)),
+  };
+}
+
+function filtroEnvelope(b: BBoxLatLon) {
+  const e = envelopeDer(b);
+  return `<SPATIALFILTER relation="area_intersection"><ENVELOPE minx="${e.minx.toFixed(1)}" miny="${e.miny.toFixed(1)}" maxx="${e.maxx.toFixed(1)}" maxy="${e.maxy.toFixed(1)}" /></SPATIALFILTER>`;
+}
+
+function bboxDe(pontos: LatLon[]): BBoxLatLon {
+  return {
+    sul: Math.min(...pontos.map((p) => p.lat)),
+    norte: Math.max(...pontos.map((p) => p.lat)),
+    oeste: Math.min(...pontos.map((p) => p.lon)),
+    leste: Math.max(...pontos.map((p) => p.lon)),
+  };
+}
+
+function intersecao(a: BBoxLatLon, b: BBoxLatLon): BBoxLatLon | null {
+  const r = {
+    sul: Math.max(a.sul, b.sul),
+    norte: Math.min(a.norte, b.norte),
+    oeste: Math.max(a.oeste, b.oeste),
+    leste: Math.min(a.leste, b.leste),
+  };
+  return r.norte > r.sul && r.leste > r.oeste ? r : null;
+}
+
+/**
+ * Limite oficial de uma regional do DER (campo REGIONAL da camada "municipios",
+ * numeração idêntica ao CGR: 2 = Itapetininga, 3 = Bauru, 13 = Rio Claro …).
+ */
+export async function limiteRegional(numero: number): Promise<LimiteRegional | null> {
+  const chave = `regional:${numero}`;
+  const guardado = doCache<LimiteRegional>(chave);
+  if (guardado) return guardado;
+
+  const feicoes = await consultar(
+    pedido(
+      `<LAYER id="municipios" /><SPATIALQUERY subfields="REGIONAL REGIO_NOME MUNICIPIO #SHAPE#" where="regional = ${Math.round(numero)}" />`,
+      300,
+    ),
+  );
+  if (feicoes.length === 0) return null;
+
+  const aneis: LatLon[][] = [];
+  const municipios: string[] = [];
+  let nome: string | null = null;
+  for (const f of feicoes) {
+    nome = nome ?? f.campos["REGIO_NOME"] ?? null;
+    if (f.campos["MUNICIPIO"]) municipios.push(f.campos["MUNICIPIO"]!);
+    for (const anel of f.aneis) {
+      const reduzido = decimar(anel, 0.01);
+      if (reduzido.length > 3) aneis.push(reduzido);
+    }
+  }
+  const todos = aneis.flat();
+  if (todos.length === 0) return null;
+
+  const limite: LimiteRegional = {
+    numero,
+    nome,
+    municipios: municipios.sort(),
+    aneis,
+    bbox: bboxDe(todos),
+  };
+  guardar(chave, limite);
+  return limite;
+}
+
+export type CamadasArea = {
+  rodovias: LinhaDer[];
+  marcos: MarcoAreaDer[];
+  limite: LimiteRegional | null;
+  bboxConsultado: BBoxLatLon | null;
+  truncado: boolean;
+  obtidoEm: number;
+  aviso: string | null;
+};
+
+/**
+ * Camadas técnicas do DER-SP dentro da área visível, já recortadas pela
+ * regional do funcionário (nada de outras regionais é transferido).
+ */
+export async function camadasNaArea(opcoes: {
+  bbox: BBoxLatLon;
+  regional?: number | null;
+  marcos?: boolean;
+}): Promise<CamadasArea> {
+  // O limite da regional é pesado: buscado em paralelo e reaproveitado do cache.
+  const pedidoLimite = opcoes.regional
+    ? limiteRegional(opcoes.regional).catch(() => null)
+    : Promise.resolve(null);
+
+  const pedidoRodovias = consultar(
+    pedido(
+      `<LAYER id="d23" /><SPATIALQUERY subfields="CODIGO NOME CLASSE PISTA EXTENSAO #SHAPE#">${filtroEnvelope(opcoes.bbox)}</SPATIALQUERY>`,
+      500,
+    ),
+  );
+  const pedidoMarcos = opcoes.marcos
+    ? consultar(
+        pedido(
+          `<LAYER id="1193" /><SPATIALQUERY subfields="CODIGO KM #SHAPE#">${filtroEnvelope(opcoes.bbox)}</SPATIALQUERY>`,
+          800,
+        ),
+      )
+    : Promise.resolve([]);
+
+  const [limite, feicoes, pontos] = await Promise.all([
+    pedidoLimite,
+    pedidoRodovias,
+    pedidoMarcos,
+  ]);
+
+  const area = limite ? intersecao(opcoes.bbox, limite.bbox) : opcoes.bbox;
+  const dentro = (p: LatLon) =>
+    !area || (p.lat >= area.sul && p.lat <= area.norte && p.lon >= area.oeste && p.lon <= area.leste);
+
+  const rodovias: LinhaDer[] = [];
+  for (const f of feicoes) {
+    for (const linha of f.linhas) {
+      // recorte pela regional: nada de outras regionais sai do servidor
+      if (area && !linha.some(dentro)) continue;
+      rodovias.push({
+        codigo: f.campos["CODIGO"] ?? "",
+        nome: f.campos["NOME"] || null,
+        classe: f.campos["CLASSE"] || null,
+        pista: f.campos["PISTA"] || null,
+        extensao: numeroDer(f.campos["EXTENSAO"]),
+        pontos: decimar(linha, 0.00008),
+      });
+    }
+  }
+
+  const marcos: MarcoAreaDer[] = pontos.flatMap((f) => {
+    const km = numeroDer(f.campos["KM"]);
+    const p = f.pontos[0];
+    if (km == null || !p || !dentro(p)) return [];
+    return [{ codigo: f.campos["CODIGO"] ?? "", km, lat: p.lat, lon: p.lon }];
+  });
+
+  return {
+    limite,
+    obtidoEm: Date.now(),
+    rodovias,
+    marcos,
+    bboxConsultado: area,
+    truncado: feicoes.length >= 500,
+    aviso:
+      limite && !area
+        ? "A área exibida está fora da regional. Aproxime o mapa da sua regional."
+        : null,
+  };
+}

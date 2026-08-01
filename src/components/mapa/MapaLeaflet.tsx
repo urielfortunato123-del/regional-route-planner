@@ -26,6 +26,28 @@ export type LinhaMapa = {
 
 export type FocoMapa = { lat: number; lon: number; zoom?: number; chave: string };
 
+export type LinhaDerMapa = {
+  codigo: string;
+  nome: string | null;
+  classe: string | null;
+  pista: string | null;
+  extensao: number | null;
+  pontos: Array<{ lat: number; lon: number }>;
+};
+
+export type MarcoDerMapa = { codigo: string; km: number; lat: number; lon: number };
+
+export type CliqueRodoviaDer = {
+  rodovia: LinhaDerMapa;
+  lat: number;
+  lon: number;
+};
+
+export type AreaMapa = {
+  bbox: { sul: number; oeste: number; norte: number; leste: number };
+  zoom: number;
+};
+
 type Props = {
   marcadores: MarcadorMapa[];
   linhas: LinhaMapa[];
@@ -34,7 +56,18 @@ type Props = {
   aoClicar?: (p: { lat: number; lon: number }) => void;
   aoSelecionar?: (id: string) => void;
   altura?: string;
+  /** Camadas técnicas oficiais do DER-SP. */
+  derRodovias?: LinhaDerMapa[];
+  derMarcos?: MarcoDerMapa[];
+  derLimite?: Array<Array<{ lat: number; lon: number }>>;
+  mostrarDerRodovias?: boolean;
+  mostrarDerMarcos?: boolean;
+  mostrarDerLimite?: boolean;
+  aoMover?: (area: AreaMapa) => void;
+  aoClicarRodoviaDer?: (c: CliqueRodoviaDer) => void;
+  aoClicarMarcoDer?: (m: MarcoDerMapa) => void;
 };
+
 
 const CENTRO_SP: [number, number] = [-22.6, -48.8];
 
@@ -55,6 +88,15 @@ function icone(m: MarcadorMapa) {
   });
 }
 
+/** Cor por classe oficial da malha DER-SP. */
+function corClasse(classe: string | null) {
+  const c = (classe ?? "").toLowerCase();
+  if (c.includes("acesso")) return "#f97316";
+  if (c.includes("municipal")) return "#64748b";
+  if (c.includes("federal")) return "#065f46";
+  return "#1e3a8a";
+}
+
 export default function MapaLeaflet({
   marcadores,
   linhas,
@@ -63,16 +105,34 @@ export default function MapaLeaflet({
   aoClicar,
   aoSelecionar,
   altura = "60vh",
+  derRodovias = [],
+  derMarcos = [],
+  derLimite = [],
+  mostrarDerRodovias = true,
+  mostrarDerMarcos = true,
+  mostrarDerLimite = true,
+  aoMover,
+  aoClicarRodoviaDer,
+  aoClicarMarcoDer,
 }: Props) {
   const div = useRef<HTMLDivElement | null>(null);
   const mapa = useRef<L.Map | null>(null);
   const camadaMarcadores = useRef<L.LayerGroup | null>(null);
   const camadaLinhas = useRef<L.LayerGroup | null>(null);
   const camadaUsuario = useRef<L.LayerGroup | null>(null);
+  const camadaDerRodovias = useRef<L.LayerGroup | null>(null);
+  const camadaDerMarcos = useRef<L.LayerGroup | null>(null);
+  const camadaDerLimite = useRef<L.LayerGroup | null>(null);
   const cliqueRef = useRef(aoClicar);
   const selecionarRef = useRef(aoSelecionar);
+  const moverRef = useRef(aoMover);
+  const cliqueRodoviaRef = useRef(aoClicarRodoviaDer);
+  const cliqueMarcoRef = useRef(aoClicarMarcoDer);
   cliqueRef.current = aoClicar;
   selecionarRef.current = aoSelecionar;
+  moverRef.current = aoMover;
+  cliqueRodoviaRef.current = aoClicarRodoviaDer;
+  cliqueMarcoRef.current = aoClicarMarcoDer;
 
   useEffect(() => {
     if (!div.current || mapa.current) return;
@@ -82,21 +142,120 @@ export default function MapaLeaflet({
     );
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: '&copy; colaboradores do <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+      attribution:
+        '&copy; colaboradores do <a href="https://www.openstreetmap.org/">OpenStreetMap</a> (mapa-base) &middot; malha rodoviária, marcos e regionais: DER-SP (WebRota)',
     }).addTo(m);
+    m.createPane("der-limite").style.zIndex = "380";
+    m.createPane("der-rodovias").style.zIndex = "400";
+    m.createPane("der-marcos").style.zIndex = "420";
+    camadaDerLimite.current = L.layerGroup([], { pane: "der-limite" }).addTo(m);
+    camadaDerRodovias.current = L.layerGroup([], { pane: "der-rodovias" }).addTo(m);
+    camadaDerMarcos.current = L.layerGroup([], { pane: "der-marcos" }).addTo(m);
     camadaLinhas.current = L.layerGroup().addTo(m);
     camadaMarcadores.current = L.layerGroup().addTo(m);
     camadaUsuario.current = L.layerGroup().addTo(m);
     m.on("click", (e: L.LeafletMouseEvent) =>
       cliqueRef.current?.({ lat: e.latlng.lat, lon: e.latlng.lng }),
     );
+    const avisarArea = () => {
+      const b = m.getBounds();
+      moverRef.current?.({
+        bbox: { sul: b.getSouth(), oeste: b.getWest(), norte: b.getNorth(), leste: b.getEast() },
+        zoom: m.getZoom(),
+      });
+    };
+    m.on("moveend", avisarArea);
     mapa.current = m;
-    setTimeout(() => m.invalidateSize(), 120);
+    setTimeout(() => {
+      m.invalidateSize();
+      avisarArea();
+    }, 120);
     return () => {
       m.remove();
       mapa.current = null;
     };
   }, []);
+
+  // malha rodoviária oficial DER-SP
+  useEffect(() => {
+    const grupo = camadaDerRodovias.current;
+    if (!grupo) return;
+    grupo.clearLayers();
+    if (!mostrarDerRodovias) return;
+    for (const r of derRodovias) {
+      if (r.pontos.length < 2) continue;
+      const dupla = (r.pista ?? "").toLowerCase().includes("dupl");
+      const linha = L.polyline(
+        r.pontos.map((p) => [p.lat, p.lon] as [number, number]),
+        {
+          pane: "der-rodovias",
+          color: corClasse(r.classe),
+          weight: dupla ? 6 : 4,
+          opacity: 0.9,
+          ...(dupla ? {} : {}),
+        },
+      );
+      linha.on("click", (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e);
+        cliqueRodoviaRef.current?.({ rodovia: r, lat: e.latlng.lat, lon: e.latlng.lng });
+      });
+      linha.bindTooltip(`${r.codigo}${r.nome ? ` — ${r.nome}` : ""}`, { sticky: true });
+      grupo.addLayer(linha);
+    }
+  }, [derRodovias, mostrarDerRodovias]);
+
+  // marcos quilométricos oficiais
+  useEffect(() => {
+    const grupo = camadaDerMarcos.current;
+    if (!grupo) return;
+    grupo.clearLayers();
+    if (!mostrarDerMarcos) return;
+    for (const marco of derMarcos) {
+      const ponto = L.marker([marco.lat, marco.lon], {
+        pane: "der-marcos",
+        icon: L.divIcon({
+          className: "",
+          html: `<div style="display:flex;align-items:center;gap:3px">
+            <span style="width:9px;height:9px;border-radius:2px;background:#facc15;border:1.5px solid #1e293b"></span>
+            <span style="font:700 10px/1 system-ui,sans-serif;color:#0f172a;background:rgba(255,255,255,.85);padding:1px 3px;border-radius:3px">km ${String(marco.km).replace(".", ",")}</span>
+          </div>`,
+          iconSize: [70, 14],
+          iconAnchor: [5, 7],
+        }),
+      });
+      ponto.on("click", (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e);
+        cliqueMarcoRef.current?.(marco);
+      });
+      grupo.addLayer(ponto);
+    }
+  }, [derMarcos, mostrarDerMarcos]);
+
+  // limite oficial da regional
+  useEffect(() => {
+    const grupo = camadaDerLimite.current;
+    if (!grupo) return;
+    grupo.clearLayers();
+    if (!mostrarDerLimite) return;
+    for (const anel of derLimite) {
+      if (anel.length < 3) continue;
+      grupo.addLayer(
+        L.polygon(
+          anel.map((p) => [p.lat, p.lon] as [number, number]),
+          {
+            pane: "der-limite",
+            color: "#0f766e",
+            weight: 2,
+            dashArray: "6 6",
+            fillColor: "#14b8a6",
+            fillOpacity: 0.05,
+            interactive: false,
+          },
+        ),
+      );
+    }
+  }, [derLimite, mostrarDerLimite]);
+
 
   useEffect(() => {
     const grupo = camadaMarcadores.current;

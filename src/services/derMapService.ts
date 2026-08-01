@@ -12,6 +12,7 @@
  */
 import {
   derBuscarRodovias,
+  derCamadas,
   derGeometria,
   derMarcos,
   derMunicipio,
@@ -547,4 +548,80 @@ export function linkOsm(p: LatLon) {
 
 export function textoCoordenadas(p: LatLon) {
   return `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`;
+}
+
+// ---------------------------------------------------------------- camadas técnicas DER
+
+export type BBoxLatLon = { sul: number; oeste: number; norte: number; leste: number };
+
+export type LinhaDer = {
+  codigo: string;
+  nome: string | null;
+  classe: string | null;
+  pista: string | null;
+  extensao: number | null;
+  pontos: LatLon[];
+};
+
+export type MarcoAreaDer = { codigo: string; km: number; lat: number; lon: number };
+
+export type LimiteRegionalDer = {
+  numero: number;
+  nome: string | null;
+  municipios: string[];
+  aneis: LatLon[][];
+  bbox: BBoxLatLon;
+};
+
+export type CamadasDer = {
+  rodovias: LinhaDer[];
+  marcos: MarcoAreaDer[];
+  limite: LimiteRegionalDer | null;
+  bboxConsultado: BBoxLatLon | null;
+  truncado: boolean;
+  obtidoEm: number;
+  aviso: string | null;
+  fonte: FonteDado;
+};
+
+/** "CGR_03_BAURU" → 3 (mesma numeração das regionais na base do DER). */
+export function numeroRegionalDer(codigo: string | null | undefined): number | null {
+  if (!codigo) return null;
+  const m = codigo.match(/CGR[_.\s-]*(\d{1,2})/i);
+  return m ? Number(m[1]) : null;
+}
+
+function chaveArea(b: BBoxLatLon, regional: number | null, marcos: boolean) {
+  const r = (n: number) => n.toFixed(2);
+  return `camadas:${regional ?? "todas"}:${marcos ? "m" : "s"}:${r(b.sul)},${r(b.oeste)},${r(b.norte)},${r(b.leste)}`;
+}
+
+/**
+ * Carrega as camadas oficiais (malha rodoviária, marcos quilométricos e limite
+ * da regional) da área visível. Sem serviço, devolve a última base salva —
+ * nunca substitui pelos dados do mapa-base.
+ */
+export async function carregarCamadasDer(opcoes: {
+  bbox: BBoxLatLon;
+  regionalCodigo?: string | null;
+  marcos?: boolean;
+}): Promise<CamadasDer | null> {
+  const regional = numeroRegionalDer(opcoes.regionalCodigo);
+  const marcos = opcoes.marcos ?? false;
+  const chave = chaveArea(opcoes.bbox, regional, marcos);
+  const r = await comContingencia(chave, async () =>
+    derCamadas({
+      data: {
+        sul: opcoes.bbox.sul,
+        norte: opcoes.bbox.norte,
+        oeste: opcoes.bbox.oeste,
+        leste: opcoes.bbox.leste,
+        regional,
+        marcos,
+      },
+    }),
+  );
+  if (!r) return null;
+  const v = r.valor as unknown as Omit<CamadasDer, "fonte">;
+  return { ...v, obtidoEm: r.em, fonte: r.fonte };
 }
