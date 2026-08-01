@@ -367,8 +367,10 @@ export async function lerProgramacaoPdf(
 
   const registros: RegistroExtraido[] = [];
   const paginasComOcr: number[] = [];
+  const diagnostico: LinhaDiagnostico[] = [];
   let colunas: Coluna[] | null = null;
   let regionalAnterior: string | null = null;
+  let periodoDeclarado = detectarPeriodoDeclarado(arquivo.name);
 
   for (let numeroPagina = 1; numeroPagina <= doc.numPages; numeroPagina++) {
     aoProgredir?.(`Lendo página ${numeroPagina} de ${doc.numPages}`, numeroPagina / doc.numPages);
@@ -399,20 +401,32 @@ export async function lerProgramacaoPdf(
     }
 
     const linhas = palavras.length ? agruparLinhas(palavras) : [];
-    const textoPagina = linhas.map((l) => l.map((p) => p.texto).join(" ")).join("\n");
-    const regionalDaPagina = detectarRegional(textoPagina.split("\n").slice(0, 6).join(" "));
+    const textoPagina = linhas.length
+      ? linhas.map((l) => l.map((p) => p.texto).join(" ")).join("\n")
+      : (linhasTexto ?? []).join("\n");
+    if (!periodoDeclarado.inicio) periodoDeclarado = detectarPeriodoDeclarado(textoPagina);
 
     const fontesDeLinha: Array<{ linha: Palavra[] | null; texto: string }> = linhas.length
       ? linhas.map((l) => ({ linha: l, texto: l.map((p) => p.texto).join(" ") }))
       : (linhasTexto ?? []).map((texto) => ({ linha: null, texto }));
 
     let yAnterior: number | null = null;
+    let numeroLinha = 0;
     for (const { linha, texto } of fontesDeLinha) {
+      numeroLinha += 1;
 
       if (linha) {
         const possivelCabecalho = lerCabecalho(linha);
         if (possivelCabecalho) {
           colunas = possivelCabecalho;
+          diagnostico.push({
+            pagina: numeroPagina,
+            linha: numeroLinha,
+            texto,
+            regional: null,
+            status: "ignorada",
+            motivo: "Cabeçalho da tabela",
+          });
           continue;
         }
       }
