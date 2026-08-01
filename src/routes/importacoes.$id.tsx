@@ -190,6 +190,10 @@ function ConferenciaPagina() {
   ).length;
   const validos = registros.filter((r) => r.status_validacao === "valido").length;
   const jaConfirmados = registros.filter((r) => r.status_validacao === "confirmado").length;
+  const aSalvar = registros.filter(
+    (r) => r.status_validacao !== "rejeitado" && !r.programacao_id && !!r.regional_codigo,
+  ).length;
+
 
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
