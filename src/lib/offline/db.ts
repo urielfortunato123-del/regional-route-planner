@@ -370,6 +370,82 @@ export async function resumoLocal(regional: string): Promise<ResumoLocal> {
   };
 }
 
+/**
+ * Apaga do aparelho tudo o que veio de uma importação: cabeçalho, linhas,
+ * programações, rotas, registros de campo, PDFs gerados e pendências.
+ */
+export async function limparImportacaoLocal(
+  importacaoId: string,
+  idsProgramacao: string[] = [],
+) {
+  const db = banco();
+  if (!db) return;
+  const alvo = new Set(idsProgramacao);
+
+  const programacoes = await db.programacoes.toArray();
+  const daImportacao = programacoes.filter((p) => {
+    const d = p.dados as Record<string, unknown>;
+    return d["importacao_id"] === importacaoId || alvo.has(p.id);
+  });
+  for (const p of daImportacao) alvo.add(p.id);
+
+  await db.transaction(
+    "rw",
+    [db.programacoes, db.rotas, db.fiscalizacao, db.pendencias, db.importacoes, db.arquivos, db.campo],
+    async () => {
+      await db.importacoes.delete(importacaoId);
+      if (daImportacao.length) await db.programacoes.bulkDelete(daImportacao.map((p) => p.id));
+
+      const rotas = await db.rotas.toArray();
+      const rotasAlvo = rotas.filter((r) => {
+        const d = r.dados as Record<string, unknown>;
+        if (d["importacao_id"] === importacaoId) return true;
+        const itens = (d["itens"] ?? []) as Array<Record<string, unknown>>;
+        return (
+          Array.isArray(itens) &&
+          itens.some((i) => alvo.has(String(i["programacao_id"] ?? i["id"] ?? "")))
+        );
+      });
+      if (rotasAlvo.length) await db.rotas.bulkDelete(rotasAlvo.map((r) => r.id));
+
+      const fisc = await db.fiscalizacao.toArray();
+      const fiscAlvo = fisc.filter((f) => alvo.has(f.programacao_id));
+      if (fiscAlvo.length) await db.fiscalizacao.bulkDelete(fiscAlvo.map((f) => f.id));
+
+      const campo = await db.campo.toArray();
+      const campoAlvo = campo.filter((c) =>
+        alvo.has(String((c.dados as Record<string, unknown>)["programacao_id"] ?? "")),
+      );
+      if (campoAlvo.length) await db.campo.bulkDelete(campoAlvo.map((c) => c.id));
+
+      const arquivos = await db.arquivos.toArray();
+      const arquivosAlvo = arquivos.filter((a) => a.nome.includes(importacaoId));
+      if (arquivosAlvo.length) await db.arquivos.bulkDelete(arquivosAlvo.map((a) => a.id));
+
+      const pendencias = await db.pendencias.toArray();
+      const pendAlvo = pendencias.filter((p) => {
+        const carga = p.payload as Record<string, unknown>;
+        return (
+          carga["importacaoId"] === importacaoId ||
+          carga["importacao_id"] === importacaoId ||
+          alvo.has(String(carga["programacaoId"] ?? carga["programacao_id"] ?? ""))
+        );
+      });
+      for (const p of pendAlvo) if (p.id != null) await db.pendencias.delete(p.id);
+    },
+  );
+}
+
+/** Apaga apenas o PDF guardado localmente para uma importação. */
+export async function limparPdfLocal(importacaoId: string) {
+  const db = banco();
+  if (!db) return;
+  const arquivos = await db.arquivos.toArray();
+  const alvo = arquivos.filter((a) => a.nome.includes(importacaoId));
+  if (alvo.length) await db.arquivos.bulkDelete(alvo.map((a) => a.id));
+}
+
+
 /** Apaga tudo o que pertence a uma regional (usado na troca de regional). */
 export async function limparRegional(regional: string) {
   const db = banco();
