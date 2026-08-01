@@ -10,6 +10,7 @@ import { Identificacao } from "@/components/Identificacao";
 import { usePerfilLocal } from "@/lib/perfil-local";
 import { REGIONAIS, rotuloRegional } from "@/lib/regionais";
 import {
+  acaoEmLoteConferencia,
   acaoRegistroImportacao,
   confirmarImportacao,
   duplicarImportacao,
@@ -59,6 +60,13 @@ type Registro = {
   texto_original: string | null;
   duplicado: boolean | null;
   status_validacao: string;
+  status_conferencia?: string | null;
+  motivo_conferencia?: string | null;
+  data_fora_periodo?: boolean | null;
+  periodo_inicio_esperado?: string | null;
+  periodo_fim_esperado?: string | null;
+  conferido_em?: string | null;
+  conferido_por?: string | null;
   motivos: string[] | null;
   programacao_id?: string | null;
 
@@ -86,7 +94,18 @@ function ConferenciaPagina() {
   const { perfil, carregado, salvar } = usePerfilLocal();
   const navegar = useNavigate();
   const fila = useQueryClient();
-  const [filtro, setFiltro] = useState<"todos" | "revisar" | "valido" | "duplicado" | "rejeitado">("todos");
+  const [filtro, setFiltro] = useState<
+    | "todos"
+    | "revisar"
+    | "valido"
+    | "duplicado"
+    | "rejeitado"
+    | "data_divergente"
+    | "sem_regional"
+    | "sem_km"
+    | "corrigidos"
+  >("todos");
+  const [busca, setBusca] = useState("");
   const [editando, setEditando] = useState<string | null>(null);
   const [rascunho, setRascunho] = useState<Partial<Registro>>({});
 
@@ -162,6 +181,25 @@ function ConferenciaPagina() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const lote = useMutation({
+    mutationFn: (acao: "aceitar_datas" | "ajustar_para_inicio" | "ajustar_para_fim" | "marcar_revisar") =>
+      acaoEmLoteConferencia({
+        data: {
+          funcionarioId: perfil!.id,
+          importacaoId: id,
+          acao,
+          alvo: "data_fora_periodo",
+          registroIds: [],
+        },
+      }),
+    onSuccess: (r) => {
+      toast.success(`${r.alterados} linha(s) atualizada(s) na conferência.`);
+      recarregar();
+      void fila.invalidateQueries();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const abrirPdf = useMutation({
     mutationFn: () => urlPdfImportacao({ data: { funcionarioId: perfil!.id, importacaoId: id } }),
     onSuccess: (r) => {
@@ -177,7 +215,20 @@ function ConferenciaPagina() {
       if (filtro === "duplicado") return !!r.duplicado;
       if (filtro === "valido") return r.status_validacao === "valido" || r.status_validacao === "confirmado";
       if (filtro === "rejeitado") return r.status_validacao === "rejeitado";
+      if (filtro === "data_divergente") return !!r.data_fora_periodo;
+      if (filtro === "sem_regional") return !r.regional_codigo;
+      if (filtro === "sem_km") return r.km_inicial == null || !r.rodovia;
+      if (filtro === "corrigidos") return !!r.foi_corrigido;
       return r.status_validacao === "revisar" || r.status_validacao === "pendente";
+    }).filter((r) => {
+      const termo = busca.trim().toLowerCase();
+      if (!termo) return true;
+      return [r.rodovia, r.equipe, r.atividade, r.data_inicial, r.texto_original, r.regional_codigo,
+        String(r.km_inicial ?? ""), String(r.km_final ?? "")]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(termo);
     });
     const mapa = new Map<string, Registro[]>();
     for (const r of filtrados) {
@@ -185,12 +236,13 @@ function ConferenciaPagina() {
       mapa.set(chave, [...(mapa.get(chave) ?? []), r]);
     }
     return [...mapa.entries()].sort((a, b) => b[1].length - a[1].length);
-  }, [registros, filtro]);
+  }, [registros, filtro, busca]);
 
   const emConferencia = registros.filter(
     (r) => r.status_validacao === "revisar" || r.status_validacao === "pendente",
   ).length;
   const validos = registros.filter((r) => r.status_validacao === "valido").length;
+  const datasDivergentes = registros.filter((r) => r.data_fora_periodo).length;
   const jaConfirmados = registros.filter((r) => r.status_validacao === "confirmado").length;
   const aSalvar = registros.filter(
     (r) => r.status_validacao !== "rejeitado" && !r.programacao_id && !!r.regional_codigo,
@@ -258,6 +310,38 @@ function ConferenciaPagina() {
               mostrarConferir={false}
             />
 
+            {datasDivergentes > 0 ? (
+              <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
+                <p className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  {datasDivergentes} linha(s) com data fora do período{" "}
+                  {importacao.periodo_inicio
+                    ? `${importacao.periodo_inicio} a ${importacao.periodo_fim}`
+                    : "declarado no PDF"}
+                  . Nada foi descartado — decida em lote o que fazer com elas.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Botao variante="contorno" disabled={lote.isPending} onClick={() => lote.mutate("aceitar_datas")}>
+                    Aceitar as datas lidas
+                  </Botao>
+                  <Botao
+                    variante="contorno"
+                    disabled={lote.isPending || !importacao.periodo_inicio}
+                    onClick={() => lote.mutate("ajustar_para_inicio")}
+                  >
+                    Ajustar para {importacao.periodo_inicio ?? "início"}
+                  </Botao>
+                  <Botao
+                    variante="contorno"
+                    disabled={lote.isPending || !importacao.periodo_fim}
+                    onClick={() => lote.mutate("ajustar_para_fim")}
+                  >
+                    Ajustar para {importacao.periodo_fim ?? "fim"}
+                  </Botao>
+                </div>
+              </div>
+            ) : null}
+
             {emConferencia > 0 ? (
               <p className="flex items-start gap-2 rounded-md bg-warning/15 px-3 py-2 text-xs text-warning-foreground">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -276,6 +360,10 @@ function ConferenciaPagina() {
               ["valido", "Prontas"],
               ["duplicado", "Repetidas"],
               ["rejeitado", "Excluídas"],
+              ["data_divergente", `Data divergente (${datasDivergentes})`],
+              ["sem_regional", "Sem regional"],
+              ["sem_km", "Sem rodovia/km"],
+              ["corrigidos", "Corrigidas"],
             ] as const
           ).map(([valor, rotulo]) => (
             <button
@@ -290,6 +378,13 @@ function ConferenciaPagina() {
             </button>
           ))}
         </div>
+
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por rodovia, km, data, equipe ou texto do PDF"
+          className={estiloEntrada}
+        />
 
         {grupos.map(([codigo, lista]) => (
           <section key={codigo} className="space-y-2">
