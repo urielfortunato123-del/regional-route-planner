@@ -136,3 +136,56 @@ export function validarLeitura(
     aprovado: itens.every((i) => i.ok),
   };
 }
+
+/**
+ * Mesma validação, porém sobre o que já está gravado no banco (tela de
+ * auditoria), onde não existe mais o diagnóstico linha a linha do PDF.
+ */
+export function validarPersistido(
+  nomeArquivo: string,
+  totalPaginas: number,
+  registros: Array<{ pagina_pdf: number | null; regional_codigo: string | null }>,
+): ResultadoReferencia {
+  const expectativa = encontrarExpectativa(nomeArquivo);
+  const itens: ItemVerificacao[] = [
+    {
+      titulo: "Registros com regional identificada",
+      esperado: registros.length,
+      encontrado: registros.filter((r) => !!r.regional_codigo).length,
+      ok: registros.every((r) => !!r.regional_codigo),
+      detalhe: "Linhas sem regional ficam em conferência, nunca são descartadas.",
+    },
+  ];
+
+  if (expectativa) {
+    if (expectativa.totalPaginas != null) {
+      itens.push({
+        titulo: "Total de páginas",
+        esperado: expectativa.totalPaginas,
+        encontrado: totalPaginas,
+        ok: expectativa.totalPaginas === totalPaginas,
+        detalhe: "Páginas registradas na importação.",
+      });
+    }
+    for (const alvo of expectativa.porPaginaRegional) {
+      const encontrado = registros.filter(
+        (r) => r.pagina_pdf === alvo.pagina && r.regional_codigo === alvo.regional,
+      ).length;
+      itens.push({
+        titulo: `Página ${alvo.pagina} · ${alvo.regional}`,
+        esperado: alvo.esperado,
+        encontrado,
+        ok: encontrado === alvo.esperado,
+        detalhe: `Serviços gravados como ${alvo.regional} na página ${alvo.pagina}.`,
+      });
+    }
+  }
+
+  return {
+    aplicavel: !!expectativa,
+    arquivo: nomeArquivo,
+    descricao: expectativa?.descricao ?? null,
+    itens,
+    aprovado: itens.every((i) => i.ok),
+  };
+}
