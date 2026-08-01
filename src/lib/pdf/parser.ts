@@ -381,9 +381,16 @@ export async function lerProgramacaoPdf(
       // completa campos que as âncoras não encontraram usando a geometria das colunas
       if (porAncoras && porColunas) {
         for (const campo of ["equipe", "funcionario", "categoria", "contrato", "atividade", "descricao", "observacao"] as const) {
-          if (!bruto[campo] && porColunas[campo]) bruto[campo] = porColunas[campo];
+          const valor = porColunas[campo];
+          if (!bruto[campo] && valor && textoUtil(valor)) bruto[campo] = valor;
         }
       }
+      // remove resíduos numéricos que a geometria pode ter deixado nos campos de texto
+      for (const campo of ["equipe", "funcionario", "categoria", "atividade", "descricao", "observacao"] as const) {
+        const valor = bruto[campo];
+        if (valor && !textoUtil(valor)) delete bruto[campo];
+      }
+
 
       const motivos: string[] = [];
       if (!porAncoras && !porColunas) motivos.push("Linha lida sem cabeçalho de tabela identificado");
