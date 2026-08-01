@@ -288,6 +288,23 @@ export const editarRegistroImportacao = createServerFn({ method: "POST" })
       duplicado: atual.duplicado,
     });
 
+    // recalcula a divergência de data em relação ao período declarado no PDF
+    const inicioEsperado = (atual as { periodo_inicio_esperado?: string | null })
+      .periodo_inicio_esperado;
+    const fimEsperado = (atual as { periodo_fim_esperado?: string | null }).periodo_fim_esperado;
+    const dataAtual = atualizado.data_inicial ?? null;
+    const foraDoPeriodo =
+      !!inicioEsperado && !!fimEsperado && !!dataAtual
+        ? dataAtual < inicioEsperado || dataAtual > fimEsperado
+        : false;
+    const statusConferencia = foraDoPeriodo
+      ? "DATA_FORA_DO_PERIODO_CONFERIR"
+      : valido
+        ? "OK"
+        : atualizado.regional_codigo
+          ? "DADOS_INCOMPLETOS"
+          : "REGIONAL_NAO_IDENTIFICADA";
+
     const { error } = await supabaseAdmin
       .from("importacao_registros")
       .update({
@@ -298,13 +315,23 @@ export const editarRegistroImportacao = createServerFn({ method: "POST" })
         regional_confirmada: !!atualizado.regional_codigo,
         regional_origem: data.campos.regional_codigo ? "confirmacao_manual" : atual.regional_origem,
         chave_duplicidade: chaveDoRegistro(atualizado as never),
-        status_validacao: valido ? "valido" : "revisar",
-        motivos,
+        status_validacao: valido && !foraDoPeriodo ? "valido" : "revisar",
+        motivos: foraDoPeriodo
+          ? [...motivos, `Data ${dataAtual} fora do período ${inicioEsperado} a ${fimEsperado} — conferir`]
+          : motivos,
+        status_conferencia: statusConferencia,
+        data_fora_periodo: foraDoPeriodo,
+        motivo_conferencia: foraDoPeriodo
+          ? `Data ${dataAtual} fora do período ${inicioEsperado} a ${fimEsperado}`
+          : (motivos.join(" · ") || null),
         campos_corrigidos: [...corrigidos],
         foi_corrigido: corrigidos.size > 0,
+        conferido_em: new Date().toISOString(),
+        conferido_por: perfil.nome,
       } as never)
       .eq("id", data.registroId);
     if (error) throw new Error(error.message);
+
 
     await recalcularTotais(atual.importacao_id);
     return { ok: true, valido, motivos };
