@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as MapaRouteImport } from './routes/mapa'
 import { Route as RotaRouteImport } from './routes/rota'
+import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
+import { Route as ImportacoesIdRouteImport } from './routes/importacoes.$id'
 import { Route as ProgramacaoIndexRouteImport } from './routes/programacao.index'
 import { Route as ProgramacaoImportarRouteImport } from './routes/programacao.importar'
 import { Route as ProgramacaoRevisarRouteImport } from './routes/programacao.revisar'
@@ -37,6 +39,16 @@ const RotaRoute = RotaRouteImport.update({
   path: '/rota',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
+  id: '/importacoes/',
+  path: '/importacoes/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImportacoesIdRoute = ImportacoesIdRouteImport.update({
+  id: '/importacoes/$id',
+  path: '/importacoes/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProgramacaoIndexRoute = ProgramacaoIndexRouteImport.update({
   id: '/programacao/',
   path: '/programacao/',
@@ -58,8 +70,10 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof ConfiguracoesRoute
   '/mapa': typeof MapaRoute
   '/rota': typeof RotaRoute
+  '/importacoes/$id': typeof ImportacoesIdRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao/revisar': typeof ProgramacaoRevisarRoute
+  '/importacoes/': typeof ImportacoesIndexRoute
   '/programacao/': typeof ProgramacaoIndexRoute
 }
 export interface FileRoutesByTo {
@@ -67,8 +81,10 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof ConfiguracoesRoute
   '/mapa': typeof MapaRoute
   '/rota': typeof RotaRoute
+  '/importacoes/$id': typeof ImportacoesIdRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao/revisar': typeof ProgramacaoRevisarRoute
+  '/importacoes': typeof ImportacoesIndexRoute
   '/programacao': typeof ProgramacaoIndexRoute
 }
 export interface FileRoutesById {
@@ -77,8 +93,10 @@ export interface FileRoutesById {
   '/configuracoes': typeof ConfiguracoesRoute
   '/mapa': typeof MapaRoute
   '/rota': typeof RotaRoute
+  '/importacoes/$id': typeof ImportacoesIdRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao/revisar': typeof ProgramacaoRevisarRoute
+  '/importacoes/': typeof ImportacoesIndexRoute
   '/programacao/': typeof ProgramacaoIndexRoute
 }
 export interface FileRouteTypes {
@@ -88,8 +106,10 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/mapa'
     | '/rota'
+    | '/importacoes/$id'
     | '/programacao/importar'
     | '/programacao/revisar'
+    | '/importacoes/'
     | '/programacao/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -97,8 +117,10 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/mapa'
     | '/rota'
+    | '/importacoes/$id'
     | '/programacao/importar'
     | '/programacao/revisar'
+    | '/importacoes'
     | '/programacao'
   id:
     | '__root__'
@@ -106,8 +128,10 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/mapa'
     | '/rota'
+    | '/importacoes/$id'
     | '/programacao/importar'
     | '/programacao/revisar'
+    | '/importacoes/'
     | '/programacao/'
   fileRoutesById: FileRoutesById
 }
@@ -116,8 +140,10 @@ export interface RootRouteChildren {
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   MapaRoute: typeof MapaRoute
   RotaRoute: typeof RotaRoute
+  ImportacoesIdRoute: typeof ImportacoesIdRoute
   ProgramacaoImportarRoute: typeof ProgramacaoImportarRoute
   ProgramacaoRevisarRoute: typeof ProgramacaoRevisarRoute
+  ImportacoesIndexRoute: typeof ImportacoesIndexRoute
   ProgramacaoIndexRoute: typeof ProgramacaoIndexRoute
 }
 
@@ -151,6 +177,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RotaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/importacoes/': {
+      id: '/importacoes/'
+      path: '/importacoes'
+      fullPath: '/importacoes/'
+      preLoaderRoute: typeof ImportacoesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/importacoes/$id': {
+      id: '/importacoes/$id'
+      path: '/importacoes/$id'
+      fullPath: '/importacoes/$id'
+      preLoaderRoute: typeof ImportacoesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/programacao/': {
       id: '/programacao/'
       path: '/programacao'
@@ -180,20 +220,12 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracoesRoute: ConfiguracoesRoute,
   MapaRoute: MapaRoute,
   RotaRoute: RotaRoute,
+  ImportacoesIdRoute: ImportacoesIdRoute,
   ProgramacaoImportarRoute: ProgramacaoImportarRoute,
   ProgramacaoRevisarRoute: ProgramacaoRevisarRoute,
+  ImportacoesIndexRoute: ImportacoesIndexRoute,
   ProgramacaoIndexRoute: ProgramacaoIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

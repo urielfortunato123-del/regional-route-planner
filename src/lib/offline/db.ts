@@ -40,6 +40,22 @@ export type FiscalizacaoLocal = {
   sincronizado: number; // 0 ou 1 (IndexedDB não indexa boolean)
 };
 
+export type ImportacaoLocal = {
+  id: string;
+  regional_codigo: string;
+  dados: Record<string, unknown>;
+  registros?: Array<Record<string, unknown>>;
+  atualizadoEm: number;
+};
+
+export type ArquivoLocal = {
+  id: string;
+  regional_codigo: string;
+  nome: string;
+  blob: Blob;
+  criadoEm: number;
+};
+
 export type PendenciaLocal = {
   id?: number;
   regional_codigo: string;
@@ -57,6 +73,8 @@ class BancoLocal extends Dexie {
   rotas!: Table<RotaLocal, string>;
   fiscalizacao!: Table<FiscalizacaoLocal, string>;
   pendencias!: Table<PendenciaLocal, number>;
+  importacoes!: Table<ImportacaoLocal, string>;
+  arquivos!: Table<ArquivoLocal, string>;
 
   constructor() {
     super("programacao-regional");
@@ -66,6 +84,10 @@ class BancoLocal extends Dexie {
       rotas: "id, regional_codigo, atualizadoEm",
       fiscalizacao: "id, regional_codigo, programacao_id, sincronizado",
       pendencias: "++id, regional_codigo, tipo, criadoEm",
+    });
+    this.version(2).stores({
+      importacoes: "id, regional_codigo, atualizadoEm",
+      arquivos: "id, regional_codigo, criadoEm",
     });
   }
 }
@@ -177,6 +199,78 @@ export async function lerFiscalizacao(regional: string) {
   return db.fiscalizacao.where("regional_codigo").equals(regional).toArray();
 }
 
+// ------------------------------------------------------------ importações
+
+export async function guardarImportacoes(
+  regional: string,
+  importacoes: Array<Record<string, unknown>>,
+) {
+  const db = banco();
+  if (!db) return;
+  const agora = Date.now();
+  await db.importacoes.bulkPut(
+    importacoes
+      .filter((i) => typeof i["id"] === "string")
+      .map((i) => ({
+        id: String(i["id"]),
+        regional_codigo: regional,
+        dados: i,
+        atualizadoEm: agora,
+      })),
+  );
+}
+
+export async function guardarImportacaoDetalhe(
+  regional: string,
+  importacao: Record<string, unknown>,
+  registros: Array<Record<string, unknown>>,
+) {
+  const db = banco();
+  if (!db) return;
+  await db.importacoes.put({
+    id: String(importacao["id"]),
+    regional_codigo: regional,
+    dados: importacao,
+    registros,
+    atualizadoEm: Date.now(),
+  });
+}
+
+export async function lerImportacoes(regional: string) {
+  const db = banco();
+  if (!db) return [];
+  const linhas = await db.importacoes.where("regional_codigo").equals(regional).toArray();
+  return linhas.sort((a, b) => b.atualizadoEm - a.atualizadoEm);
+}
+
+export async function lerImportacao(id: string) {
+  const db = banco();
+  if (!db) return null;
+  return (await db.importacoes.get(id)) ?? null;
+}
+
+// ------------------------------------------------------------ PDFs gerados
+
+export async function guardarPdf(regional: string, nome: string, blob: Blob) {
+  const db = banco();
+  if (!db) return;
+  await db.arquivos.put({
+    id: `${nome}-${Date.now()}`,
+    regional_codigo: regional,
+    nome,
+    blob,
+    criadoEm: Date.now(),
+  });
+}
+
+export async function lerPdfs(regional: string) {
+  const db = banco();
+  if (!db) return [];
+  return (await db.arquivos.where("regional_codigo").equals(regional).toArray()).sort(
+    (a, b) => b.criadoEm - a.criadoEm,
+  );
+}
+
 // ------------------------------------------------------------ troca de regional
 
 export type ResumoLocal = {
@@ -220,8 +314,10 @@ export async function limparRegional(regional: string) {
   if (!db) return;
   await db.transaction(
     "rw",
-    [db.programacoes, db.malha, db.rotas, db.fiscalizacao, db.pendencias],
+    [db.programacoes, db.malha, db.rotas, db.fiscalizacao, db.pendencias, db.importacoes, db.arquivos],
     async () => {
+      await db.importacoes.where("regional_codigo").equals(regional).delete();
+      await db.arquivos.where("regional_codigo").equals(regional).delete();
       await db.programacoes.where("regional_codigo").equals(regional).delete();
       await db.malha.where("regional_codigo").equals(regional).delete();
       await db.rotas.where("regional_codigo").equals(regional).delete();
@@ -235,7 +331,7 @@ export async function limparRegional(regional: string) {
 export async function limparOutrasRegionais(regionalAtual: string) {
   const db = banco();
   if (!db) return;
-  const tabelas = [db.programacoes, db.malha, db.rotas, db.fiscalizacao] as const;
+  const tabelas = [db.programacoes, db.malha, db.rotas, db.fiscalizacao, db.importacoes, db.arquivos] as const;
   for (const tabela of tabelas) {
     const chaves = await tabela.toArray();
     const alvo = chaves.filter(

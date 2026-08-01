@@ -111,6 +111,234 @@ export type Database = {
           },
         ]
       }
+      importacao_registros: {
+        Row: {
+          atividade: string | null
+          atualizado_em: string
+          campos_corrigidos: string[]
+          categoria: string | null
+          chave_duplicidade: string | null
+          contrato: string | null
+          criado_em: string
+          data_final: string | null
+          data_inicial: string | null
+          descricao: string | null
+          duplicado: boolean
+          equipe: string | null
+          foi_corrigido: boolean
+          funcionario: string | null
+          id: string
+          importacao_id: string
+          km_final: number | null
+          km_inicial: number | null
+          medicao: string | null
+          motivos: string[]
+          observacao: string | null
+          pagina_pdf: number | null
+          programacao_id: string | null
+          regional_codigo: string | null
+          regional_confirmada: boolean
+          regional_id: string | null
+          regional_origem: string | null
+          rodovia: string | null
+          status_validacao: string
+          texto_original: string | null
+          valores_extraidos: Json | null
+        }
+        Insert: {
+          atividade?: string | null
+          atualizado_em?: string
+          campos_corrigidos?: string[]
+          categoria?: string | null
+          chave_duplicidade?: string | null
+          contrato?: string | null
+          criado_em?: string
+          data_final?: string | null
+          data_inicial?: string | null
+          descricao?: string | null
+          duplicado?: boolean
+          equipe?: string | null
+          foi_corrigido?: boolean
+          funcionario?: string | null
+          id?: string
+          importacao_id: string
+          km_final?: number | null
+          km_inicial?: number | null
+          medicao?: string | null
+          motivos?: string[]
+          observacao?: string | null
+          pagina_pdf?: number | null
+          programacao_id?: string | null
+          regional_codigo?: string | null
+          regional_confirmada?: boolean
+          regional_id?: string | null
+          regional_origem?: string | null
+          rodovia?: string | null
+          status_validacao?: string
+          texto_original?: string | null
+          valores_extraidos?: Json | null
+        }
+        Update: {
+          atividade?: string | null
+          atualizado_em?: string
+          campos_corrigidos?: string[]
+          categoria?: string | null
+          chave_duplicidade?: string | null
+          contrato?: string | null
+          criado_em?: string
+          data_final?: string | null
+          data_inicial?: string | null
+          descricao?: string | null
+          duplicado?: boolean
+          equipe?: string | null
+          foi_corrigido?: boolean
+          funcionario?: string | null
+          id?: string
+          importacao_id?: string
+          km_final?: number | null
+          km_inicial?: number | null
+          medicao?: string | null
+          motivos?: string[]
+          observacao?: string | null
+          pagina_pdf?: number | null
+          programacao_id?: string | null
+          regional_codigo?: string | null
+          regional_confirmada?: boolean
+          regional_id?: string | null
+          regional_origem?: string | null
+          rodovia?: string | null
+          status_validacao?: string
+          texto_original?: string | null
+          valores_extraidos?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "importacao_registros_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_pdf"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "importacao_registros_programacao_id_fkey"
+            columns: ["programacao_id"]
+            isOneToOne: false
+            referencedRelation: "programacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "importacao_registros_regional_id_fkey"
+            columns: ["regional_id"]
+            isOneToOne: false
+            referencedRelation: "regionais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      importacoes_pdf: {
+        Row: {
+          arquivo_id: string | null
+          atualizado_em: string
+          caminho_arquivo: string | null
+          confirmado_em: string | null
+          criado_em: string
+          hash_arquivo: string
+          id: string
+          importacao_anterior_id: string | null
+          nome_arquivo: string
+          periodo_fim: string | null
+          periodo_inicio: string | null
+          regionais_encontradas: string[]
+          regional_origem_id: string | null
+          status: string
+          tipo_periodo: string | null
+          total_duplicados: number
+          total_erros: number
+          total_paginas: number | null
+          total_registros: number
+          usuario_id: string | null
+          usuario_nome: string | null
+          versao: number
+        }
+        Insert: {
+          arquivo_id?: string | null
+          atualizado_em?: string
+          caminho_arquivo?: string | null
+          confirmado_em?: string | null
+          criado_em?: string
+          hash_arquivo: string
+          id?: string
+          importacao_anterior_id?: string | null
+          nome_arquivo: string
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          regionais_encontradas?: string[]
+          regional_origem_id?: string | null
+          status?: string
+          tipo_periodo?: string | null
+          total_duplicados?: number
+          total_erros?: number
+          total_paginas?: number | null
+          total_registros?: number
+          usuario_id?: string | null
+          usuario_nome?: string | null
+          versao?: number
+        }
+        Update: {
+          arquivo_id?: string | null
+          atualizado_em?: string
+          caminho_arquivo?: string | null
+          confirmado_em?: string | null
+          criado_em?: string
+          hash_arquivo?: string
+          id?: string
+          importacao_anterior_id?: string | null
+          nome_arquivo?: string
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          regionais_encontradas?: string[]
+          regional_origem_id?: string | null
+          status?: string
+          tipo_periodo?: string | null
+          total_duplicados?: number
+          total_erros?: number
+          total_paginas?: number | null
+          total_registros?: number
+          usuario_id?: string | null
+          usuario_nome?: string | null
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "importacoes_pdf_arquivo_id_fkey"
+            columns: ["arquivo_id"]
+            isOneToOne: false
+            referencedRelation: "arquivos_programacao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "importacoes_pdf_importacao_anterior_id_fkey"
+            columns: ["importacao_anterior_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_pdf"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "importacoes_pdf_regional_origem_id_fkey"
+            columns: ["regional_origem_id"]
+            isOneToOne: false
+            referencedRelation: "regionais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "importacoes_pdf_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       programacao_eventos: {
         Row: {
           criado_em: string
@@ -182,6 +410,8 @@ export type Database = {
           equipe: string | null
           funcionario: string | null
           id: string
+          importacao_id: string | null
+          importacao_registro_id: string | null
           km_final: number | null
           km_inicial: number | null
           latitude_final: number | null
@@ -217,6 +447,8 @@ export type Database = {
           equipe?: string | null
           funcionario?: string | null
           id?: string
+          importacao_id?: string | null
+          importacao_registro_id?: string | null
           km_final?: number | null
           km_inicial?: number | null
           latitude_final?: number | null
@@ -252,6 +484,8 @@ export type Database = {
           equipe?: string | null
           funcionario?: string | null
           id?: string
+          importacao_id?: string | null
+          importacao_registro_id?: string | null
           km_final?: number | null
           km_inicial?: number | null
           latitude_final?: number | null
@@ -277,6 +511,13 @@ export type Database = {
             columns: ["arquivo_id"]
             isOneToOne: false
             referencedRelation: "arquivos_programacao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "programacoes_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_pdf"
             referencedColumns: ["id"]
           },
           {
@@ -398,6 +639,7 @@ export type Database = {
           distancia_total: number | null
           geometria: Json | null
           id: string
+          importacao_id: string | null
           ponto_final: Json | null
           ponto_inicial: Json | null
           regional_id: string
@@ -414,6 +656,7 @@ export type Database = {
           distancia_total?: number | null
           geometria?: Json | null
           id?: string
+          importacao_id?: string | null
           ponto_final?: Json | null
           ponto_inicial?: Json | null
           regional_id: string
@@ -430,6 +673,7 @@ export type Database = {
           distancia_total?: number | null
           geometria?: Json | null
           id?: string
+          importacao_id?: string | null
           ponto_final?: Json | null
           ponto_inicial?: Json | null
           regional_id?: string
@@ -440,6 +684,13 @@ export type Database = {
           usuario_nome?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "rotas_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_pdf"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "rotas_regional_id_fkey"
             columns: ["regional_id"]

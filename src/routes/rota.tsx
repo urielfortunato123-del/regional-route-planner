@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import {
   ArrowDown,
   ArrowUp,
+  CalendarDays,
   Crosshair,
+  FileDown,
   MapPin,
   Navigation,
   Route as RouteIcon,
@@ -25,8 +27,11 @@ import {
   salvarCoordenadas,
   salvarRota,
 } from "@/lib/programacao.functions";
+import { diasDaProgramacao } from "@/lib/importacoes.functions";
+import { calcularPercurso } from "@/lib/osrm.functions";
 import { enfileirar } from "@/lib/offline/sync";
-import { guardarRotaLocal } from "@/lib/offline/db";
+import { guardarPdf, guardarRotaLocal } from "@/lib/offline/db";
+import { gerarPdfRota, nomeArquivoRota, type ParadaPdf } from "@/lib/rotas/pdf";
 import { validarRota, textoDosProblemas, type ItemRota } from "@/lib/rotas/validacao";
 import { linkGoogleMaps, linkWaze, localizarTrecho } from "@/services/derMapService";
 
@@ -59,6 +64,17 @@ type Servico = {
   regionalConfirmada: boolean;
   lat: number | null;
   lon: number | null;
+  bruto: Record<string, string | number | boolean | null>;
+  aproximado: boolean;
+};
+
+type Percurso = {
+  disponivel: boolean;
+  motivo?: string;
+  pernas: Array<{ distanciaKm: number; tempoMin: number }>;
+  distanciaTotalKm: number;
+  tempoTotalMin: number;
+  geometria: Array<{ lat: number; lon: number }>;
 };
 
 function distanciaKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
@@ -75,7 +91,10 @@ function RotaPagina() {
   const { perfil, carregado, salvar } = usePerfilLocal();
   const cliente = useQueryClient();
 
-  const [visao, setVisao] = useState<"hoje" | "amanha" | "semana">("hoje");
+  const [visao, setVisao] = useState<"hoje" | "amanha" | "semana" | "dia">("hoje");
+  const [dia, setDia] = useState<string>("");
+  const [percurso, setPercurso] = useState<Percurso | null>(null);
+  const [calculando, setCalculando] = useState(false);
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [ordem, setOrdem] = useState<string[]>([]);
@@ -85,9 +104,16 @@ function RotaPagina() {
   const [progresso, setProgresso] = useState(0);
 
   const programacao = useQuery({
-    queryKey: ["programacoes", perfil?.id, "rota", visao],
+    queryKey: ["programacoes", perfil?.id, "rota", visao, dia],
+    enabled: !!perfil?.id && (visao !== "dia" || !!dia),
+    queryFn: () =>
+      listarProgramacoes({ data: { funcionarioId: perfil!.id, visao, ...(dia ? { dia } : {}) } }),
+  });
+
+  const dias = useQuery({
+    queryKey: ["dias-programacao", perfil?.id],
     enabled: !!perfil?.id,
-    queryFn: () => listarProgramacoes({ data: { funcionarioId: perfil!.id, visao } }),
+    queryFn: () => diasDaProgramacao({ data: { funcionarioId: perfil!.id } }),
   });
 
   const rotasSalvas = useQuery({
@@ -156,6 +182,8 @@ function RotaPagina() {
         regionalConfirmada: Boolean(r["regional_confirmada"]),
         lat,
         lon,
+        bruto: r,
+        aproximado: r["localizacao_confirmada"] === false,
       });
       setProgresso(Math.round(((i + 1) / registros.length) * 100));
     }
@@ -214,17 +242,11 @@ function RotaPagina() {
     [ordem, porId],
   );
 
-  function sugerirOrdem() {
-    const base = selecionados
-      .map((id) => porId.get(id))
-      .filter((s): s is Servico => !!s && s.lat != null && s.lon != null);
-    if (!partida) {
-      toast.error("Defina o ponto de partida antes de gerar a rota sugerida.");
-      return;
-    }
+  /** Vizinho mais próximo em linha reta — usado quando o serviço de rotas não responde. */
+  function ordemPorProximidade(base: Servico[], origem: { lat: number; lon: number }) {
     const restantes = [...base];
     const sequencia: Servico[] = [];
-    let atual = { lat: partida.lat, lon: partida.lon };
+    let atual = origem;
     while (restantes.length) {
       let melhor = 0;
       let menor = Number.POSITIVE_INFINITY;
@@ -239,9 +261,80 @@ function RotaPagina() {
       sequencia.push(escolhido);
       atual = { lat: escolhido.lat!, lon: escolhido.lon! };
     }
-    setOrdem(sequencia.map((s) => s.id));
-    setTipo("sugerida");
-    toast.success("Ordem sugerida por proximidade.");
+    return sequencia;
+  }
+
+  /** Distâncias e tempos pela malha viária (OSRM). `otimizar` reordena as paradas. */
+  async function calcularNaMalha(ids: string[], otimizar: boolean) {
+    if (!partida) {
+      toast.error("Defina o ponto de partida antes de calcular a rota.");
+      return;
+    }
+    const base = ids
+      .map((id) => porId.get(id))
+      .filter((s): s is Servico => !!s && s.lat != null && s.lon != null);
+    if (!base.length) {
+      toast.error("Nenhum serviço com posição válida para montar a rota.");
+      return;
+    }
+    setCalculando(true);
+    try {
+      const resposta = await calcularPercurso({
+        data: {
+          pontos: [
+            { lat: partida.lat, lon: partida.lon },
+            ...base.map((s) => ({ lat: s.lat!, lon: s.lon! })),
+          ],
+          otimizar,
+        },
+      });
+
+      if (resposta.disponivel) {
+        const sequencia = otimizar
+          ? resposta.ordem
+              .filter((i) => i > 0)
+              .map((i) => base[i - 1])
+              .filter((s): s is Servico => !!s)
+          : base;
+        setOrdem(sequencia.map((s) => s.id));
+        setPercurso({
+          disponivel: true,
+          pernas: resposta.pernas,
+          distanciaTotalKm: resposta.distanciaTotalKm,
+          tempoTotalMin: resposta.tempoTotalMin,
+          geometria: resposta.geometria,
+        });
+        setTipo(otimizar ? "sugerida" : tipo);
+        toast.success(
+          `Rota calculada pela malha viária: ${resposta.distanciaTotalKm.toFixed(1)} km.`,
+        );
+        return;
+      }
+
+      const sequencia = otimizar
+        ? ordemPorProximidade(base, { lat: partida.lat, lon: partida.lon })
+        : base;
+      setOrdem(sequencia.map((s) => s.id));
+      setPercurso({
+        disponivel: false,
+        motivo: resposta.motivo ?? "Serviço de rotas indisponível.",
+        pernas: [],
+        distanciaTotalKm: 0,
+        tempoTotalMin: 0,
+        geometria: [],
+      });
+      if (otimizar) setTipo("sugerida");
+      toast.warning("Serviço de rotas indisponível: usando distância aproximada por proximidade.");
+    } catch {
+      setPercurso(null);
+      toast.error("Não foi possível calcular a rota agora.");
+    } finally {
+      setCalculando(false);
+    }
+  }
+
+  function sugerirOrdem() {
+    void calcularNaMalha(selecionados, true);
   }
 
   function mover(id: string, direcao: -1 | 1) {
@@ -255,6 +348,7 @@ function RotaPagina() {
       return copia;
     });
     setTipo("manual");
+    setPercurso(null);
   }
 
   const itensRota: ItemRota[] = itensOrdenados
@@ -277,7 +371,7 @@ function RotaPagina() {
       )
     : [];
 
-  const distanciaTotal = useMemo(() => {
+  const distanciaAproximada = useMemo(() => {
     if (!partida || itensRota.length === 0) return 0;
     let total = 0;
     let atual = { lat: partida.lat, lon: partida.lon };
@@ -289,6 +383,12 @@ function RotaPagina() {
     return total;
   }, [itensRota, partida]);
 
+  const percursoReal = !!percurso?.disponivel;
+  const distanciaTotal = percursoReal ? percurso!.distanciaTotalKm : distanciaAproximada;
+  const tempoTotal = percursoReal
+    ? percurso!.tempoTotalMin
+    : Math.round((distanciaAproximada / 50) * 60) + itensRota.length * 20;
+
   const gravarRota = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -299,13 +399,16 @@ function RotaPagina() {
           ? { rotulo: partida.rotulo, latitude: partida.lat, longitude: partida.lon }
           : null,
         distanciaTotal: Number(distanciaTotal.toFixed(2)),
-        tempoEstimado: Math.round((distanciaTotal / 50) * 60) + itensRota.length * 20,
-        itens: itensRota.map((i) => ({
+        tempoEstimado: tempoTotal,
+        situacao: "ativa" as const,
+        itens: itensRota.map((i, idx) => ({
           programacaoId: i.programacaoId,
           ordem: i.ordem,
           rotulo: i.rotulo,
           latitude: i.latitude!,
           longitude: i.longitude!,
+          distanciaAnterior: percurso?.pernas[idx]?.distanciaKm ?? null,
+          tempoAnterior: percurso?.pernas[idx]?.tempoMin ?? null,
         })),
       };
       if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -344,6 +447,78 @@ function RotaPagina() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  async function exportarPdf() {
+    if (!perfil || !itensRota.length) {
+      toast.error("Monte a rota antes de exportar.");
+      return;
+    }
+    const paradas: ParadaPdf[] = itensRota.map((item, idx) => {
+      const s = porId.get(item.programacaoId);
+      const b = s?.bruto ?? {};
+      const texto = (chave: string) => (b[chave] == null ? "-" : String(b[chave]));
+      return {
+        ordem: idx + 1,
+        rodovia: texto("rodovia"),
+        kmInicial: texto("km_inicial"),
+        kmFinal: texto("km_final"),
+        atividade: texto("atividade"),
+        descricao: texto("descricao"),
+        equipe: texto("equipe"),
+        contrato: texto("contrato"),
+        observacao: texto("observacao"),
+        distanciaKm: percurso?.pernas[idx]?.distanciaKm ?? null,
+        tempoMin: percurso?.pernas[idx]?.tempoMin ?? null,
+        status: texto("status"),
+        lat: item.latitude,
+        lon: item.longitude,
+        aproximado: !!s?.aproximado,
+      };
+    });
+
+    const rodovias = new Set(paradas.map((p) => p.rodovia).filter((r) => r !== "-"));
+    const extensao = paradas.reduce((soma, p) => {
+      const a = Number(String(p.kmInicial).replace(",", "."));
+      const b = Number(String(p.kmFinal).replace(",", "."));
+      return Number.isFinite(a) && Number.isFinite(b) ? soma + Math.abs(b - a) : soma;
+    }, 0);
+
+    const dados = {
+      funcionario: perfil.nome,
+      regionalCodigo: perfil.regional_codigo,
+      regionalRotulo: perfil.regional_rotulo,
+      dataRota: dia || new Date().toISOString().slice(0, 10),
+      pontoInicial: partida,
+      distanciaTotalKm: distanciaTotal,
+      tempoTotalMin: tempoTotal,
+      percursoReal,
+      paradas,
+      resumo: {
+        rodovias: rodovias.size,
+        servicos: paradas.length,
+        extensaoKm: extensao,
+        pendentes: paradas.filter((p) => p.status !== "concluido").length,
+        concluidos: paradas.filter((p) => p.status === "concluido").length,
+      },
+      origem: {
+        arquivo: String(registros[0]?.["nome_arquivo"] ?? "programação importada em PDF"),
+        importacaoId: registros[0]?.["importacao_id"] ? String(registros[0]["importacao_id"]) : null,
+        processadoEm: null,
+        versao: null,
+      },
+    };
+
+    const blob = gerarPdfRota(dados);
+    const nome = nomeArquivoRota(dados);
+    await guardarPdf(perfil.regional_codigo, nome, blob);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = nome;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast.success("Rota exportada em PDF e guardada no aparelho.");
+  }
+
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
 
@@ -369,7 +544,9 @@ function RotaPagina() {
     })),
   ];
 
-  const linhas: LinhaMapa[] = partida
+  const linhas: LinhaMapa[] = percurso?.geometria.length
+    ? [{ id: "rota-real", pontos: percurso.geometria, cor: "#b45309", tracejada: false }]
+    : partida
     ? [
         {
           id: "rota",
@@ -398,6 +575,7 @@ function RotaPagina() {
               <option value="hoje">Serviços de hoje</option>
               <option value="amanha">Serviços de amanhã</option>
               <option value="semana">Próximos 7 dias</option>
+              <option value="dia">Dia escolhido</option>
             </select>
             <Botao onClick={() => void localizarServicos()} disabled={localizando}>
               <MapPin className="size-4" />
@@ -408,6 +586,55 @@ function RotaPagina() {
             Só entram na rota serviços da {perfil.regional_rotulo} com regional confirmada e posição
             válida na malha oficial do DER-SP.
           </p>
+
+          <div className="space-y-1">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <CalendarDays className="size-4" /> Dias com programação
+            </p>
+            {(dias.data?.dias ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhum dia com programação confirmada na sua regional.
+              </p>
+            ) : null}
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {(dias.data?.dias ?? []).map((d) => (
+                <button
+                  key={d.data}
+                  type="button"
+                  onClick={() => {
+                    setDia(d.data);
+                    setVisao("dia");
+                    setServicos([]);
+                    setPercurso(null);
+                  }}
+                  className={`min-w-[9.5rem] shrink-0 rounded-lg border p-2 text-left text-xs ${
+                    dia === d.data && visao === "dia"
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-surface"
+                  }`}
+                >
+                  <span className="block font-display text-sm font-bold">
+                    {new Date(`${d.data}T12:00:00`).toLocaleDateString("pt-BR", {
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "2-digit",
+                    })}
+                  </span>
+                  <span className="block text-muted-foreground">
+                    {d.servicos} serviço(s) · {d.rodovias} rodovia(s)
+                  </span>
+                  <span className="block text-muted-foreground">
+                    {d.extensaoKm.toFixed(1)} km · {d.pendentes} pendente(s)
+                  </span>
+                  {d.semLocalizacao ? (
+                    <span className="block text-destructive">
+                      {d.semLocalizacao} sem posição
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </div>
         </Cartao>
 
         <Cartao className="space-y-3">
@@ -446,8 +673,33 @@ function RotaPagina() {
                   {tipo === "sugerida" ? "Ordem sugerida" : "Ordem manual"}
                 </Etiqueta>
                 <Etiqueta tom="neutro">{distanciaTotal.toFixed(1)} km</Etiqueta>
+                <Etiqueta tom="neutro">
+                  {Math.floor(tempoTotal / 60)}h{String(tempoTotal % 60).padStart(2, "0")}
+                </Etiqueta>
                 <Etiqueta tom="neutro">{itensRota.length} parada(s)</Etiqueta>
+                <Etiqueta tom={percursoReal ? "ok" : "alerta"}>
+                  {percursoReal ? "distância pela estrada" : "distância aproximada"}
+                </Etiqueta>
               </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Botao
+                  variante="contorno"
+                  disabled={calculando}
+                  onClick={() => void calcularNaMalha(ordem.filter((id) => selecionados.includes(id)), false)}
+                >
+                  {calculando ? "Calculando..." : "Recalcular pela estrada"}
+                </Botao>
+                <Botao variante="contorno" onClick={() => void exportarPdf()}>
+                  <FileDown className="size-4" /> Exportar rota em PDF
+                </Botao>
+              </div>
+
+              {percurso && !percurso.disponivel ? (
+                <p className="rounded-md bg-warning/15 px-3 py-2 text-xs text-warning-foreground">
+                  {percurso.motivo} As distâncias mostradas são aproximadas em linha reta.
+                </p>
+              ) : null}
 
               {problemas.length ? (
                 <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
