@@ -10,6 +10,7 @@
  */
 import {
   detectarRegional,
+  detectarRegionalNaLinha,
   normalizarRodovia,
   normalizarTexto,
   parseData,
