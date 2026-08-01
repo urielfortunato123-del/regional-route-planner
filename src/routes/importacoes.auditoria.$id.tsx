@@ -23,7 +23,10 @@ import {
   type ResultadoTesteOffline,
 } from "@/lib/pipeline/consistencia";
 import { processPendingGeometries } from "@/lib/geometria/job";
-import { rotuloStatusGeometria } from "@/lib/geometria/status";
+import { ROTULO_GEOMETRIA, ehStatusGeometria } from "@/lib/geometria/status";
+
+const rotuloStatusGeometria = (valor: string) =>
+  ehStatusGeometria(valor) ? ROTULO_GEOMETRIA[valor] : valor;
 
 export const Route = createFileRoute("/importacoes/auditoria/$id")({
   head: () => ({
