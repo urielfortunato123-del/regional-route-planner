@@ -1111,57 +1111,163 @@ function MapaPagina() {
           ) : null}
 
           <ul className="divide-y divide-border">
-            {servicos.map((s) => (
-              <li key={s.id} className="flex items-start gap-3 py-2">
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4"
-                  checked={selecionados.includes(s.id)}
-                  onChange={() => alternarSelecao(s.id)}
-                />
-                <button
-                  className="flex-1 text-left"
-                  onClick={() =>
-                    setFoco({
-                      lat: s.trecho.inicio.lat,
-                      lon: s.trecho.inicio.lon,
-                      zoom: 15,
-                      chave: `s-${s.id}-${Date.now()}`,
-                    })
-                  }
-                >
-                  <p className="text-sm font-semibold">{s.rotulo}</p>
-                  <p className="text-xs text-muted-foreground">{s.detalhe || "—"}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {textoCoordenadas(s.trecho.inicio)} • referência {s.trecho.precisao}
-                  </p>
-                </button>
-                <a
-                  href={linkGoogleMaps(s.trecho.inicio)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 text-primary"
-                  aria-label={`Navegar até ${s.rotulo}`}
-                >
-                  <Navigation className="size-4" />
-                </a>
-              </li>
-            ))}
+            {servicosVisiveis.map((s) => {
+              const aberto = servicoAberto === s.id;
+              const acesso = acessos[s.id];
+              const daRegional = s.regionalCodigo === perfil.regional_codigo;
+              return (
+                <li key={s.id} className="py-2">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4"
+                      aria-label={`Selecionar ${s.rotulo}`}
+                      checked={selecionados.includes(s.id)}
+                      disabled={!daRegional}
+                      onChange={() => alternarSelecao(s.id)}
+                    />
+                    <button
+                      className="flex-1 text-left"
+                      onClick={() => {
+                        setServicoAberto(aberto ? null : s.id);
+                        setFoco({
+                          lat: s.trecho.inicio.lat,
+                          lon: s.trecho.inicio.lon,
+                          zoom: 15,
+                          chave: `s-${s.id}-${Date.now()}`,
+                        });
+                      }}
+                    >
+                      <p className="text-sm font-semibold">{s.rotulo}</p>
+                      <p className="text-xs text-muted-foreground">{s.detalhe || "—"}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {s.trecho.rodovia} · km {s.trecho.kmInicial.toFixed(3).replace(".", ",")} a{" "}
+                        {s.trecho.kmFinal.toFixed(3).replace(".", ",")} ·{" "}
+                        {s.trecho.extensaoKm.toFixed(2).replace(".", ",")} km · referência{" "}
+                        {s.trecho.precisao}
+                      </p>
+                      {acesso ? (
+                        <p className="text-[11px] font-semibold text-primary">
+                          acesso: {acesso.rotulo}
+                        </p>
+                      ) : null}
+                      {!daRegional ? (
+                        <Etiqueta tom="erro">Fora da sua regional — bloqueado</Etiqueta>
+                      ) : null}
+                    </button>
+                    <a
+                      href={linkGoogleMaps(acesso ?? s.trecho.inicio)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 text-primary"
+                      aria-label={`Navegar até ${s.rotulo}`}
+                    >
+                      <Navigation className="size-4" />
+                    </a>
+                  </div>
+
+                  {aberto && daRegional ? (
+                    <div className="mt-2 space-y-2 rounded-lg border border-border bg-surface p-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Ponto de acesso ao trecho
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {acessosDoTrecho(s, posicao ?? null).map((a) => (
+                          <button
+                            key={a.tipo}
+                            onClick={() => escolherAcesso(s, a)}
+                            className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${
+                              acesso?.tipo === a.tipo
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background"
+                            }`}
+                          >
+                            {a.tipo === "inicio"
+                              ? "Início do trecho"
+                              : a.tipo === "fim"
+                                ? "Fim do trecho"
+                                : "Mais próximo de mim"}
+                          </button>
+                        ))}
+                        {pontoClicado ? (
+                          <button
+                            onClick={() =>
+                              escolherAcesso(s, {
+                                tipo: "manual",
+                                rotulo: `Acesso escolhido no mapa (${textoCoordenadas(pontoClicado)})`,
+                                lat: pontoClicado.lat,
+                                lon: pontoClicado.lon,
+                                km: null,
+                              })
+                            }
+                            className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold"
+                          >
+                            Usar ponto marcado no mapa
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Botao variante="contorno" onClick={() => abrirFormulario("inspecao", s)}>
+                          <ClipboardCheck className="size-4" /> Inspeção
+                        </Botao>
+                        <Botao variante="contorno" onClick={() => abrirFormulario("ocorrencia", s)}>
+                          <ShieldAlert className="size-4" /> Ocorrência
+                        </Botao>
+                        <a
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-2 text-xs font-semibold text-primary"
+                          href={linkWaze(acesso ?? s.trecho.inicio)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Waze
+                        </a>
+                      </div>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </Cartao>
 
         {rota ? (
           <Cartao className="space-y-2">
-            <h2 className="font-display text-base font-semibold">Roteiro sugerido</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-display text-base font-semibold">Conferência da rota</h2>
+              <Etiqueta tom={rota.pelaEstrada ? "ok" : "alerta"}>
+                {rota.pelaEstrada ? "distância pela estrada" : "distância aproximada"}
+              </Etiqueta>
+              <Etiqueta tom="neutro">{rota.distanciaTotalKm.toFixed(1)} km</Etiqueta>
+              <Etiqueta tom="neutro">
+                {Math.floor(rota.tempoTotalMin / 60)}h
+                {String(Math.round(rota.tempoTotalMin % 60)).padStart(2, "0")}
+              </Etiqueta>
+              <Etiqueta tom="neutro">{rota.paradas.length} trecho(s)</Etiqueta>
+            </div>
+            {rota.motivo ? (
+              <p className="rounded-md bg-warning/15 px-3 py-2 text-xs text-warning-foreground">
+                {rota.motivo}
+              </p>
+            ) : null}
             <ol className="space-y-2">
-              {rota.map((s, i) => (
-                <li key={s.id} className="flex items-center gap-3 text-sm">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                    {i + 1}
+              {rota.paradas.map((parada) => (
+                <li key={parada.item.id} className="flex items-start gap-3 text-sm">
+                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    {parada.ordem}
                   </span>
-                  <span className="flex-1">{s.rotulo}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{parada.item.rotulo}</p>
+                    <p className="text-xs text-muted-foreground">{parada.acesso.rotulo}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {parada.distanciaKm != null
+                        ? `${parada.distanciaKm.toFixed(1).replace(".", ",")} km`
+                        : "—"}
+                      {parada.tempoMin != null ? ` · ${Math.round(parada.tempoMin)} min` : ""} até o
+                      acesso
+                    </p>
+                  </div>
                   <a
-                    href={linkWaze(s.trecho.inicio)}
+                    href={linkWaze(parada.acesso)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs font-semibold text-primary"
@@ -1172,11 +1278,106 @@ function MapaPagina() {
               ))}
             </ol>
             <p className="text-xs text-muted-foreground">
-              Ordem por proximidade a partir da sua posição atual (ou do primeiro serviço, se o GPS
-              estiver desligado). Você pode selecionar apenas alguns serviços e gerar de novo.
+              Ordem por proximidade a partir da sua posição (ou do primeiro trecho, sem GPS). Para
+              trocar o ponto de entrada, abra o serviço na lista e escolha outro acesso — depois
+              gere a rota de novo.
             </p>
           </Cartao>
         ) : null}
+
+        <Cartao className="space-y-3">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="size-4 text-primary" />
+            <h2 className="font-display text-base font-semibold">
+              Inspeções e ocorrências da regional
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Botao variante="contorno" onClick={() => abrirFormulario("inspecao")}>
+              <ClipboardCheck className="size-4" /> Nova inspeção
+            </Botao>
+            <Botao variante="contorno" onClick={() => abrirFormulario("ocorrencia")}>
+              <ShieldAlert className="size-4" /> Nova ocorrência
+            </Botao>
+          </div>
+          {listaInspecoes.length === 0 && listaOcorrencias.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum registro de campo ainda. Toque em um trecho no mapa ou use os botões acima.
+            </p>
+          ) : null}
+          <ul className="divide-y divide-border">
+            {listaOcorrencias.slice(0, 12).map((o) => (
+              <li key={String(o["id"])} className="py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong>{String(o["tipo"])}</strong>
+                  <Etiqueta
+                    tom={
+                      o["prioridade"] === "emergencial" || o["prioridade"] === "alta"
+                        ? "erro"
+                        : "alerta"
+                    }
+                  >
+                    {String(o["prioridade"])}
+                  </Etiqueta>
+                  <Etiqueta tom="neutro">{String(o["situacao"])}</Etiqueta>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {String(o["rodovia"] ?? "sem rodovia")}
+                  {o["km"] != null ? ` km ${String(o["km"]).replace(".", ",")}` : ""} ·{" "}
+                  {String(o["descricao"] ?? "")}
+                </p>
+                {typeof o["latitude"] === "number" && typeof o["longitude"] === "number" ? (
+                  <button
+                    className="text-xs font-semibold text-primary"
+                    onClick={() =>
+                      setFoco({
+                        lat: Number(o["latitude"]),
+                        lon: Number(o["longitude"]),
+                        zoom: 16,
+                        chave: `ocor-${o["id"]}-${Date.now()}`,
+                      })
+                    }
+                  >
+                    Ver no mapa
+                  </button>
+                ) : null}
+              </li>
+            ))}
+            {listaInspecoes.slice(0, 12).map((i) => (
+              <li key={String(i["id"])} className="py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong>Inspeção</strong>
+                  <Etiqueta tom={i["condicao"] === "adequada" ? "ok" : "alerta"}>
+                    {String(i["condicao"] ?? "—")}
+                  </Etiqueta>
+                  <Etiqueta tom="neutro">{String(i["situacao"])}</Etiqueta>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {String(i["rodovia"] ?? "sem rodovia")}
+                  {i["km_inicial"] != null
+                    ? ` km ${String(i["km_inicial"]).replace(".", ",")}`
+                    : ""}{" "}
+                  · {String(i["servico_executado"] ?? i["observacao"] ?? "")}
+                </p>
+                {typeof i["latitude"] === "number" && typeof i["longitude"] === "number" ? (
+                  <button
+                    className="text-xs font-semibold text-primary"
+                    onClick={() =>
+                      setFoco({
+                        lat: Number(i["latitude"]),
+                        lon: Number(i["longitude"]),
+                        zoom: 16,
+                        chave: `insp-${i["id"]}-${Date.now()}`,
+                      })
+                    }
+                  >
+                    Ver no mapa
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Cartao>
 
         <Cartao className="space-y-2 text-sm">
           <div className="flex items-center gap-2">
@@ -1214,6 +1415,20 @@ function MapaPagina() {
           </div>
         </Cartao>
       </div>
+
+      {formulario ? (
+        <FormularioCampo
+          tipo={formulario.tipo}
+          contexto={formulario.contexto}
+          funcionarioId={perfil.id}
+          regionalCodigo={perfil.regional_codigo}
+          aoFechar={() => setFormulario(null)}
+          aoSalvar={() => {
+            cliente.invalidateQueries({ queryKey: ["inspecoes"] });
+            cliente.invalidateQueries({ queryKey: ["ocorrencias"] });
+          }}
+        />
+      ) : null}
     </AppShell>
   );
 }
