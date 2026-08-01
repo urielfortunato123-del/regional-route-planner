@@ -374,11 +374,20 @@ export async function lerProgramacaoPdf(
       }
       if (!linhaEhDado(texto)) continue;
 
-      const bruto =
-        linha && colunas ? distribuirEmColunas(linha, colunas) : extrairPorRegex(texto);
+      const porAncoras = extrairPorAncoras(texto);
+      const porColunas = linha && colunas ? distribuirEmColunas(linha, colunas) : null;
+      const bruto = porAncoras ?? porColunas ?? extrairPorRegex(texto);
+
+      // completa campos que as âncoras não encontraram usando a geometria das colunas
+      if (porAncoras && porColunas) {
+        for (const campo of ["equipe", "funcionario", "categoria", "contrato", "atividade", "descricao", "observacao"] as const) {
+          if (!bruto[campo] && porColunas[campo]) bruto[campo] = porColunas[campo];
+        }
+      }
 
       const motivos: string[] = [];
-      if (!linha || !colunas) motivos.push("Linha lida sem cabeçalho de tabela identificado");
+      if (!porAncoras && !porColunas) motivos.push("Linha lida sem cabeçalho de tabela identificado");
+
 
       // --- Regional: linha a linha ---
       let origem: RegistroExtraido["regional_origem"] = "linha";
