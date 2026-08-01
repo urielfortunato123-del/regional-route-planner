@@ -275,14 +275,34 @@ function intersecao(a: BBoxLatLon, b: BBoxLatLon): BBoxLatLon | null {
   return r.norte > r.sul && r.leste > r.oeste ? r : null;
 }
 
+/** Limite já carregado na memória do servidor (sem ir ao DER). */
+export function limiteRegionalCacheado(numero: number): LimiteRegional | null {
+  return doCache<LimiteRegional>(`regional:${numero}`);
+}
+
+const limitesEmCurso = new Map<number, Promise<LimiteRegional | null>>();
+
+/** Dispara o carregamento do limite sem bloquear a resposta atual. */
+export function aquecerLimiteRegional(numero: number) {
+  if (limiteRegionalCacheado(numero) || limitesEmCurso.has(numero)) return;
+  const p = limiteRegional(numero)
+    .catch(() => null)
+    .finally(() => limitesEmCurso.delete(numero));
+  limitesEmCurso.set(numero, p);
+}
+
 /**
  * Limite oficial de uma regional do DER (campo REGIONAL da camada "municipios",
  * numeração idêntica ao CGR: 2 = Itapetininga, 3 = Bauru, 13 = Rio Claro …).
+ * A consulta traz ~900 KB de polígonos e leva ~15 s: fica em cache de memória.
  */
 export async function limiteRegional(numero: number): Promise<LimiteRegional | null> {
   const chave = `regional:${numero}`;
   const guardado = doCache<LimiteRegional>(chave);
   if (guardado) return guardado;
+  const emCurso = limitesEmCurso.get(numero);
+  if (emCurso) return emCurso;
+
 
   const feicoes = await consultar(
     pedido(
@@ -336,10 +356,14 @@ export async function camadasNaArea(opcoes: {
   regional?: number | null;
   marcos?: boolean;
 }): Promise<CamadasArea> {
-  // O limite da regional é pesado: buscado em paralelo e reaproveitado do cache.
-  const pedidoLimite = opcoes.regional
-    ? limiteRegional(opcoes.regional).catch(() => null)
-    : Promise.resolve(null);
+  // O limite da regional é pesado (~15 s). Não bloqueia o desenho da malha:
+  // usa o que já está em cache e aquece em segundo plano para a próxima consulta.
+  let limite: LimiteRegional | null = null;
+  if (opcoes.regional) {
+    limite = limiteRegionalCacheado(opcoes.regional);
+    if (!limite) aquecerLimiteRegional(opcoes.regional);
+  }
+
 
   const pedidoRodovias = consultar(
     pedido(
@@ -347,7 +371,7 @@ export async function camadasNaArea(opcoes: {
       500,
     ),
   );
-  const pedidoMarcos = opcoes.marcos
+  const pedidoMarcos: Promise<FeatureDer[]> = opcoes.marcos
     ? consultar(
         pedido(
           `<LAYER id="1193" /><SPATIALQUERY subfields="CODIGO KM #SHAPE#">${filtroEnvelope(opcoes.bbox)}</SPATIALQUERY>`,
@@ -356,11 +380,9 @@ export async function camadasNaArea(opcoes: {
       )
     : Promise.resolve([]);
 
-  const [limite, feicoes, pontos] = await Promise.all([
-    pedidoLimite,
-    pedidoRodovias,
-    pedidoMarcos,
-  ]);
+
+  const [feicoes, pontos] = await Promise.all([pedidoRodovias, pedidoMarcos]);
+
 
   const area = limite ? intersecao(opcoes.bbox, limite.bbox) : opcoes.bbox;
   const dentro = (p: LatLon) =>
@@ -399,6 +421,9 @@ export async function camadasNaArea(opcoes: {
     aviso:
       limite && !area
         ? "A área exibida está fora da regional. Aproxime o mapa da sua regional."
-        : null,
+        : !limite && opcoes.regional
+          ? "Limite oficial da regional ainda carregando no serviço do DER. A malha e os marcos já são oficiais."
+          : null,
   };
+
 }
