@@ -10,6 +10,9 @@ import {
   PlugZap,
   RefreshCw,
   ShieldCheck,
+  FileDown,
+  FileSpreadsheet,
+  Search,
 } from "lucide-react";
 
 import { AppShell, Botao, Cartao, Etiqueta } from "@/components/AppShell";
@@ -24,6 +27,8 @@ import {
 } from "@/lib/pipeline/consistencia";
 import { processPendingGeometries } from "@/lib/geometria/job";
 import { ROTULO_GEOMETRIA, ehStatusGeometria } from "@/lib/geometria/status";
+import { validarPersistido } from "@/lib/pdf/validacao-referencia";
+import { exportarDiagnosticoCsv, exportarDiagnosticoPdf } from "@/lib/auditoria/exportar";
 
 const rotuloStatusGeometria = (valor: string) =>
   ehStatusGeometria(valor) ? ROTULO_GEOMETRIA[valor] : valor;
@@ -68,7 +73,10 @@ function AuditoriaPagina() {
   const { perfil, carregado, salvar } = usePerfilLocal();
   const [consistencia, setConsistencia] = useState<ResultadoConsistencia | null>(null);
   const [offline, setOffline] = useState<ResultadoTesteOffline | null>(null);
-  const [filtro, setFiltro] = useState<"todos" | "bloqueados" | "sem_geometria">("todos");
+  const [filtro, setFiltro] = useState<
+    "todos" | "bloqueados" | "sem_geometria" | "data_divergente" | "sem_regional"
+  >("todos");
+  const [busca, setBusca] = useState("");
 
   const auditoria = useQuery({
     queryKey: ["auditoria", id, perfil?.id],
@@ -113,11 +121,71 @@ function AuditoriaPagina() {
   });
 
   const registros = useMemo(() => {
-    const lista = auditoria.data?.registros ?? [];
-    if (filtro === "bloqueados") return lista.filter((r) => !r.elegivel_rota);
-    if (filtro === "sem_geometria") return lista.filter((r) => r.latitude_inicial == null);
+    let lista = auditoria.data?.registros ?? [];
+    if (filtro === "bloqueados") lista = lista.filter((r) => !r.elegivel_rota);
+    if (filtro === "sem_geometria") lista = lista.filter((r) => r.latitude_inicial == null);
+    if (filtro === "data_divergente") lista = lista.filter((r) => r.data_fora_periodo);
+    if (filtro === "sem_regional") lista = lista.filter((r) => !r.regional_codigo);
+    const termo = busca.trim().toLowerCase();
+    if (termo) {
+      lista = lista.filter((r) =>
+        [
+          r.rodovia,
+          r.regional_codigo,
+          r.equipe,
+          r.atividade,
+          r.data_inicial,
+          r.texto_original,
+          String(r.km_inicial ?? ""),
+          String(r.km_final ?? ""),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(termo),
+      );
+    }
     return lista;
-  }, [auditoria.data, filtro]);
+  }, [auditoria.data, filtro, busca]);
+
+  const referencia = useMemo(() => {
+    const lista = auditoria.data?.registros ?? [];
+    if (!auditoria.data?.importacao || !lista.length) return null;
+    return validarPersistido(
+      auditoria.data.importacao.nome_arquivo,
+      auditoria.data.etapas.paginasPdf,
+      lista,
+    );
+  }, [auditoria.data]);
+
+  const linhasExportacao = useMemo(
+    () =>
+      registros.map((r) => ({
+        pagina_pdf: r.pagina_pdf,
+        texto_original: r.texto_original,
+        regional_codigo: r.regional_codigo,
+        rodovia: r.rodovia,
+        km_inicial: r.km_inicial,
+        km_final: r.km_final,
+        data_inicial: r.data_inicial,
+        data_final: r.data_final,
+        equipe: r.equipe,
+        atividade: r.atividade,
+        status_validacao: r.status_validacao,
+        status_conferencia: r.status_conferencia,
+        data_fora_periodo: r.data_fora_periodo,
+        status_geometria: rotuloStatusGeometria(r.status_geometria),
+        status_persistencia: r.status_persistencia === "persistido" ? "Gravado" : "Em conferência",
+        na_programacao: r.na_programacao,
+        no_mapa: r.no_mapa,
+        elegivel_rota: r.elegivel_rota,
+        motivo_bloqueio: r.motivo_bloqueio,
+        conferido_em: r.conferido_em,
+        conferido_por: r.conferido_por,
+        atualizado_em: r.atualizado_em,
+      })),
+    [registros],
+  );
 
   if (!carregado) return null;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
