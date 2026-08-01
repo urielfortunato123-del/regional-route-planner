@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  ClipboardCheck,
   Crosshair,
   Layers,
   Database,
+  ShieldAlert,
   Locate,
   MapPin,
   Navigation,
@@ -27,6 +29,16 @@ import type {
 } from "@/components/mapa/MapaLeaflet";
 import { usePerfilLocal } from "@/lib/perfil-local";
 import { listarProgramacoes } from "@/lib/programacao.functions";
+import { listarInspecoes, listarOcorrencias } from "@/lib/campo.functions";
+import { FormularioCampo, type ContextoCampo } from "@/components/campo/FormularioCampo";
+import { guardarRegistrosCampo } from "@/lib/offline/db";
+import {
+  acessosDoTrecho,
+  gerarRotaInteligente,
+  type PontoAcesso,
+  type RotaCalculada,
+  type TrechoProgramado,
+} from "@/lib/rotas/inteligente";
 import { distanciaMetros } from "@/lib/der/geo";
 import {
   carregarCamadasDer,
@@ -79,12 +91,13 @@ const CORES_STATUS: Record<string, string> = {
   concluido: "#16a34a",
 };
 
-type ServicoLocalizado = {
-  id: string;
-  rotulo: string;
-  detalhe: string;
-  status: string;
-  trecho: TrechoLocalizado;
+type ServicoLocalizado = TrechoProgramado;
+
+const CORES_OCORRENCIA: Record<string, string> = {
+  baixa: "#0891b2",
+  media: "#d97706",
+  alta: "#dc2626",
+  emergencial: "#7f1d1d",
 };
 
 function usePosicao() {
@@ -140,7 +153,19 @@ function MapaPagina() {
   const [localizando, setLocalizando] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [selecionados, setSelecionados] = useState<string[]>([]);
-  const [rota, setRota] = useState<ServicoLocalizado[] | null>(null);
+  const [rota, setRota] = useState<RotaCalculada | null>(null);
+  const [gerandoRota, setGerandoRota] = useState(false);
+  const [acessos, setAcessos] = useState<Record<string, PontoAcesso>>({});
+  const [servicoAberto, setServicoAberto] = useState<string | null>(null);
+  const [formulario, setFormulario] = useState<{
+    tipo: "inspecao" | "ocorrencia";
+    contexto: ContextoCampo;
+  } | null>(null);
+  const [verTrechos, setVerTrechos] = useState(true);
+  const [verConcluidos, setVerConcluidos] = useState(true);
+  const [verInspecoes, setVerInspecoes] = useState(true);
+  const [verOcorrencias, setVerOcorrencias] = useState(true);
+  const [verRota, setVerRota] = useState(true);
   const [contingencia, setContingencia] = useState(false);
   const [pontoClicado, setPontoClicado] = useState<{
     lat: number;
@@ -162,6 +187,7 @@ function MapaPagina() {
   >([]);
 
   const { posicao, seguindo, iniciar, parar } = usePosicao();
+  const cliente = useQueryClient();
 
   useEffect(() => {
     const cancelar = observarContingencia(setContingencia);
@@ -234,6 +260,44 @@ function MapaPagina() {
   });
 
   const registros = programacao.data?.registros ?? [];
+
+  const inspecoes = useQuery({
+    queryKey: ["inspecoes", perfil?.id],
+    enabled: Boolean(perfil?.id),
+    queryFn: () => listarInspecoes({ data: { funcionarioId: perfil!.id } }),
+  });
+
+  const ocorrencias = useQuery({
+    queryKey: ["ocorrencias", perfil?.id],
+    enabled: Boolean(perfil?.id),
+    queryFn: () => listarOcorrencias({ data: { funcionarioId: perfil!.id } }),
+  });
+
+  // guarda os registros de campo no aparelho para consulta offline
+  useEffect(() => {
+    if (!perfil) return;
+    if (inspecoes.data?.inspecoes?.length) {
+      void guardarRegistrosCampo(
+        perfil.regional_codigo,
+        "inspecao",
+        inspecoes.data.inspecoes as unknown as Array<Record<string, unknown>>,
+      );
+    }
+    if (ocorrencias.data?.ocorrencias?.length) {
+      void guardarRegistrosCampo(
+        perfil.regional_codigo,
+        "ocorrencia",
+        ocorrencias.data.ocorrencias as unknown as Array<Record<string, unknown>>,
+      );
+    }
+  }, [perfil, inspecoes.data, ocorrencias.data]);
+
+  const listaInspecoes = (inspecoes.data?.inspecoes ?? []) as unknown as Array<
+    Record<string, string | number | null>
+  >;
+  const listaOcorrencias = (ocorrencias.data?.ocorrencias ?? []) as unknown as Array<
+    Record<string, string | number | boolean | null>
+  >;
 
   const localizarProgramacao = useCallback(async () => {
     if (registros.length === 0) {
