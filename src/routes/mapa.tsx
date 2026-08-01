@@ -64,7 +64,9 @@ import {
 } from "@/services/derMapService";
 
 
-const MapaLeaflet = lazy(() => import("@/components/mapa/MapaLeaflet"));
+const MapaLeaflet = lazy(() =>
+  importarComRetry(() => import("@/components/mapa/MapaLeaflet")),
+);
 
 export const Route = createFileRoute("/mapa")({
   head: () => ({
