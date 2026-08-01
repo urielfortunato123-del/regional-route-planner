@@ -786,3 +786,104 @@ export const diasDaProgramacao = createServerFn({ method: "POST" })
 
     return { perfil, dias: montarDias(registros ?? []) };
   });
+
+/**
+ * Ações em lote na conferência — pensadas para as datas divergentes.
+ *
+ * "aceitar_datas" mantém a data lida do PDF e libera a linha;
+ * "ajustar_para_inicio"/"ajustar_para_fim" trazem a data para dentro do
+ * período declarado; "marcar_revisar" devolve o lote para conferência.
+ */
+export const acaoEmLoteConferencia = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        funcionarioId: z.string().uuid(),
+        importacaoId: z.string().uuid(),
+        acao: z.enum(["aceitar_datas", "ajustar_para_inicio", "ajustar_para_fim", "marcar_revisar"]),
+        alvo: z.enum(["data_fora_periodo", "selecionados"]).default("data_fora_periodo"),
+        registroIds: z.array(z.string().uuid()).max(5000).default([]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const { avaliarRegistro, recalcularTotais, COLUNAS_REGISTRO_IMPORTACAO, carregarImportacao } =
+      await import("@/lib/importacoes.server");
+
+    const perfil = await carregarPerfil(data.funcionarioId);
+    const importacao = await carregarImportacao(data.importacaoId);
+
+    let consulta = supabaseAdmin
+      .from("importacao_registros")
+      .select(COLUNAS_REGISTRO_IMPORTACAO)
+      .eq("importacao_id", data.importacaoId);
+    if (data.alvo === "selecionados") consulta = consulta.in("id", data.registroIds);
+    else consulta = consulta.eq("data_fora_periodo", true);
+
+    const { data: registros, error } = await consulta;
+    if (error) throw new Error(error.message);
+
+    const agora = new Date().toISOString();
+    const novaData =
+      data.acao === "ajustar_para_inicio"
+        ? importacao.periodo_inicio
+        : data.acao === "ajustar_para_fim"
+          ? importacao.periodo_fim
+          : null;
+
+    let alterados = 0;
+    for (const r of registros ?? []) {
+      const dataInicial = novaData ?? r.data_inicial;
+      const { valido, motivos } = avaliarRegistro({
+        ...r,
+        data_inicial: dataInicial,
+        km_inicial: r.km_inicial == null ? null : Number(r.km_inicial),
+        km_final: r.km_final == null ? null : Number(r.km_final),
+        duplicado: false,
+      });
+
+      const revisar = data.acao === "marcar_revisar";
+      const { error: erroUpdate } = await supabaseAdmin
+        .from("importacao_registros")
+        .update({
+          ...(novaData ? { data_inicial: novaData, data_final: novaData } : {}),
+          data_fora_periodo: revisar ? true : false,
+          status_conferencia: revisar
+            ? "DATA_FORA_DO_PERIODO_CONFERIR"
+            : valido
+              ? "OK"
+              : "DADOS_INCOMPLETOS",
+          status_validacao: revisar ? "revisar" : valido ? "valido" : "revisar",
+          motivos: revisar ? ["Data fora do período — conferir"] : motivos,
+          motivo_conferencia: revisar
+            ? "Data fora do período informado no PDF"
+            : data.acao === "aceitar_datas"
+              ? `Data ${r.data_inicial} mantida e aceita na conferência`
+              : `Data ajustada para ${novaData} na conferência`,
+          conferido_em: agora,
+          conferido_por: perfil.nome,
+        } as never)
+        .eq("id", r.id);
+      if (erroUpdate) throw new Error(erroUpdate.message);
+
+      // mantém o serviço já promovido em sincronia com a conferência
+      if (r.programacao_id) {
+        await supabaseAdmin
+          .from("programacoes")
+          .update({
+            ...(novaData ? { data_inicial: novaData, data_final: novaData } : {}),
+            data_fora_periodo: revisar,
+            status_conferencia: revisar ? "DATA_FORA_DO_PERIODO_CONFERIR" : "OK",
+            conferido_em: agora,
+            conferido_por: perfil.nome,
+          } as never)
+          .eq("id", r.programacao_id);
+      }
+      alterados += 1;
+    }
+
+    await recalcularTotais(data.importacaoId);
+    return { ok: true, alterados };
+  });
