@@ -739,6 +739,14 @@ export const duplicarImportacao = createServerFn({ method: "POST" })
       motivos: r.motivos,
       campos_corrigidos: r.campos_corrigidos,
       foi_corrigido: r.foi_corrigido,
+      status_conferencia: (r as { status_conferencia?: string }).status_conferencia ?? "OK",
+      motivo_conferencia: (r as { motivo_conferencia?: string | null }).motivo_conferencia ?? null,
+      data_fora_periodo: (r as { data_fora_periodo?: boolean }).data_fora_periodo ?? false,
+      periodo_inicio_esperado:
+        (r as { periodo_inicio_esperado?: string | null }).periodo_inicio_esperado ?? null,
+      periodo_fim_esperado:
+        (r as { periodo_fim_esperado?: string | null }).periodo_fim_esperado ?? null,
+
     }));
     for (let i = 0; i < copias.length; i += 400) {
       const { error: erroCopia } = await supabaseAdmin
