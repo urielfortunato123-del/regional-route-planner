@@ -337,5 +337,10 @@ export default function MapaLeaflet({
   }, [foco?.chave]);
 
 
-  return <div ref={div} style={{ height: altura }} className="w-full rounded-xl" />;
+  return (
+    <div className="mapa-container" style={{ height: altura }}>
+      <div ref={div} className="h-full w-full" />
+    </div>
+  );
+
 }
