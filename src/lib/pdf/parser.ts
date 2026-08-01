@@ -10,6 +10,7 @@
  */
 import {
   detectarRegional,
+  detectarRegionalNaLinha,
   normalizarRodovia,
   normalizarTexto,
   parseData,
@@ -56,6 +57,16 @@ export type RegistroExtraido = {
   motivosRevisao: string[];
 };
 
+/** Diagnóstico linha a linha (Página | Linha | Texto | Regional | Status | Motivo). */
+export type LinhaDiagnostico = {
+  pagina: number;
+  linha: number;
+  texto: string;
+  regional: string | null;
+  status: "aceita" | "conferencia" | "ignorada";
+  motivo: string;
+};
+
 export type ResultadoLeitura = {
   nomeArquivo: string;
   hash: string;
@@ -63,6 +74,8 @@ export type ResultadoLeitura = {
   paginasComOcr: number[];
   registros: RegistroExtraido[];
   periodo: { inicio: string | null; fim: string | null };
+  periodoDeclarado: { inicio: string | null; fim: string | null };
+  diagnostico: LinhaDiagnostico[];
 };
 
 type Palavra = { texto: string; x: number; y: number; largura: number };
@@ -85,12 +98,19 @@ const SINONIMOS: Array<{ campo: CampoTabela; termos: string[] }> = [
   { campo: "observacao", termos: ["observacao", "obs", "observacoes"] },
 ];
 
+/**
+ * Classifica a célula de um possível cabeçalho de tabela.
+ * Casamento estrito: nada de "includes", senão células de dados como
+ * "ACOMP. SERVIÇOS / TOLERÂNCIA ZERO" seriam lidas como cabeçalho e a linha
+ * inteira (com sua regional) seria descartada.
+ */
 function classificarCabecalho(texto: string): CampoTabela | null {
   const t = normalizarTexto(texto).replace(/[.:]/g, "");
-  if (!t) return null;
+  if (!t || t.length > 30) return null;
+  if (/\d/.test(t)) return null; // cabeçalhos não têm números
   for (const { campo, termos } of SINONIMOS) {
     for (const termo of termos) {
-      if (t === termo || t.startsWith(`${termo} `) || t.includes(termo)) return campo;
+      if (t === termo || t.startsWith(`${termo} `)) return campo;
     }
   }
   return null;
@@ -125,8 +145,20 @@ function agruparLinhas(palavras: Palavra[], tolerancia = 3): Palavra[][] {
   return linhas;
 }
 
+/**
+ * Uma linha que traz data, quilometragem ou o código de uma regional é dado,
+ * nunca cabeçalho.
+ */
+function pareceLinhaDeDados(texto: string): boolean {
+  if (/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(texto)) return true;
+  if (detectarRegionalNaLinha(texto)) return true;
+  return (texto.match(/\b\d{1,4}[.,]\d{1,3}\b/g)?.length ?? 0) >= 2;
+}
+
 /** Tenta ler uma linha como cabeçalho de tabela. Retorna as colunas. */
 function lerCabecalho(linha: Palavra[]): Coluna[] | null {
+  if (pareceLinhaDeDados(linha.map((p) => p.texto).join(" "))) return null;
+
   const encontrados: Coluna[] = [];
   const usados = new Set<CampoTabela>();
 
@@ -320,6 +352,22 @@ function limpar(valor: string | undefined | null): string | null {
   return t.length ? t : null;
 }
 
+/**
+ * Período informado no nome do arquivo ou no texto ("27-07-26 a 31-07-26").
+ * Serve apenas para sinalizar datas fora da semana; nenhuma linha é descartada.
+ */
+function detectarPeriodoDeclarado(texto: string): { inicio: string | null; fim: string | null } {
+  const m = texto.match(
+    /(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\s*(?:a|à|ate|até|-|–)\s*(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/i,
+  );
+  if (!m) return { inicio: null, fim: null };
+  const inicio = parseData(`${m[1]}/${m[2]}/${m[3]}`);
+  const fim = parseData(`${m[4]}/${m[5]}/${m[6]}`);
+  return inicio && fim ? { inicio, fim } : { inicio: null, fim: null };
+}
+
+
+
 export async function lerProgramacaoPdf(
   arquivo: File,
   aoProgredir?: (mensagem: string, progresso: number) => void,
@@ -335,8 +383,10 @@ export async function lerProgramacaoPdf(
 
   const registros: RegistroExtraido[] = [];
   const paginasComOcr: number[] = [];
+  const diagnostico: LinhaDiagnostico[] = [];
   let colunas: Coluna[] | null = null;
   let regionalAnterior: string | null = null;
+  let periodoDeclarado = detectarPeriodoDeclarado(arquivo.name);
 
   for (let numeroPagina = 1; numeroPagina <= doc.numPages; numeroPagina++) {
     aoProgredir?.(`Lendo página ${numeroPagina} de ${doc.numPages}`, numeroPagina / doc.numPages);
@@ -367,20 +417,32 @@ export async function lerProgramacaoPdf(
     }
 
     const linhas = palavras.length ? agruparLinhas(palavras) : [];
-    const textoPagina = linhas.map((l) => l.map((p) => p.texto).join(" ")).join("\n");
-    const regionalDaPagina = detectarRegional(textoPagina.split("\n").slice(0, 6).join(" "));
+    const textoPagina = linhas.length
+      ? linhas.map((l) => l.map((p) => p.texto).join(" ")).join("\n")
+      : (linhasTexto ?? []).join("\n");
+    if (!periodoDeclarado.inicio) periodoDeclarado = detectarPeriodoDeclarado(textoPagina);
 
     const fontesDeLinha: Array<{ linha: Palavra[] | null; texto: string }> = linhas.length
       ? linhas.map((l) => ({ linha: l, texto: l.map((p) => p.texto).join(" ") }))
       : (linhasTexto ?? []).map((texto) => ({ linha: null, texto }));
 
     let yAnterior: number | null = null;
+    let numeroLinha = 0;
     for (const { linha, texto } of fontesDeLinha) {
+      numeroLinha += 1;
 
       if (linha) {
         const possivelCabecalho = lerCabecalho(linha);
         if (possivelCabecalho) {
           colunas = possivelCabecalho;
+          diagnostico.push({
+            pagina: numeroPagina,
+            linha: numeroLinha,
+            texto,
+            regional: null,
+            status: "ignorada",
+            motivo: "Cabeçalho da tabela",
+          });
           continue;
         }
       }
@@ -389,6 +451,7 @@ export async function lerProgramacaoPdf(
       if (!linhaEhDado(texto)) {
         // continuação de célula (descrição/observação quebrada em várias linhas)
         const anterior = registros[registros.length - 1];
+        let motivo = "Linha sem rodovia, km ou data (texto auxiliar)";
         if (anterior && linha && colunas && anterior.pagina_pdf === numeroPagina) {
           const partes = distribuirEmColunas(linha, colunas);
           // y maior significa acima na página: o fragmento vem antes do texto já lido
@@ -396,6 +459,7 @@ export async function lerProgramacaoPdf(
           for (const campo of ["descricao", "observacao"] as const) {
             const valor = partes[campo];
             if (valor && textoUtil(valor)) {
+              motivo = "Continuação da linha anterior (descrição/observação)";
               const atual = anterior[campo];
               anterior[campo] = atual
                 ? acima
@@ -405,6 +469,14 @@ export async function lerProgramacaoPdf(
             }
           }
         }
+        diagnostico.push({
+          pagina: numeroPagina,
+          linha: numeroLinha,
+          texto,
+          regional: null,
+          status: "ignorada",
+          motivo,
+        });
         continue;
       }
 
@@ -434,24 +506,23 @@ export async function lerProgramacaoPdf(
       if (!porAncoras && !porColunas) motivos.push("Linha lida sem cabeçalho de tabela identificado");
 
 
-      // --- Regional: linha a linha ---
+      // --- Regional: exclusivamente pela coluna REGIONAL da própria linha ---
       let origem: RegistroExtraido["regional_origem"] = "linha";
       let regional =
-        detectarRegional(bruto.regional ?? null) ??
-        detectarRegional(texto);
-      if (!regional && regionalDaPagina) {
-        regional = regionalDaPagina;
-        origem = "cabecalho_pagina";
-      }
+        detectarRegionalNaLinha(bruto.regional ?? null) ??
+        detectarRegionalNaLinha(texto) ??
+        detectarRegional(bruto.regional ?? null);
       if (!regional && regionalAnterior) {
+        // nunca herda do cabeçalho/título da página; só da linha anterior, para revisão
         regional = regionalAnterior;
         origem = "linha_anterior";
+        motivos.push("Regional herdada da linha anterior — conferir");
       }
       if (!regional) {
         origem = "nao_identificada";
-        motivos.push("Regional não confirmada");
+        motivos.push("Regional não identificada na coluna REGIONAL");
       }
-      if (regional) regionalAnterior = regional;
+      if (regional && origem === "linha") regionalAnterior = regional;
 
       const kmInicial = parseKm(bruto.km_inicial ?? null);
       const kmFinal = parseKm(bruto.km_final ?? null);
@@ -485,6 +556,37 @@ export async function lerProgramacaoPdf(
         precisaRevisao: motivos.length > 0,
         motivosRevisao: motivos,
       });
+
+      diagnostico.push({
+        pagina: numeroPagina,
+        linha: numeroLinha,
+        texto,
+        regional,
+        status: motivos.length ? "conferencia" : "aceita",
+        motivo: motivos.join(" · ") || "Linha válida",
+      });
+    }
+  }
+
+  // datas fora do período informado no PDF: manter, apenas sinalizar
+  if (periodoDeclarado.inicio && periodoDeclarado.fim) {
+    for (const registro of registros) {
+      if (!registro.data_inicial) continue;
+      if (
+        registro.data_inicial >= periodoDeclarado.inicio &&
+        registro.data_inicial <= periodoDeclarado.fim
+      ) {
+        continue;
+      }
+      registro.motivosRevisao.push("Data fora do período informado — conferir");
+      registro.precisaRevisao = true;
+      const item = diagnostico.find(
+        (d) => d.pagina === registro.pagina_pdf && d.texto === registro.linha_bruta,
+      );
+      if (item) {
+        item.status = "conferencia";
+        item.motivo = registro.motivosRevisao.join(" · ");
+      }
     }
   }
 
@@ -496,6 +598,8 @@ export async function lerProgramacaoPdf(
     totalPaginas: doc.numPages,
     paginasComOcr,
     registros,
+    diagnostico,
+    periodoDeclarado,
     periodo: { inicio: datas[0] ?? null, fim: datas[datas.length - 1] ?? null },
   };
 }
