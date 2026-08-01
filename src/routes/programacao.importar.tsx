@@ -1,15 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, FileUp, Loader2 } from "lucide-react";
+import { AlertTriangle, FileUp, History, Loader2 } from "lucide-react";
 
-import { AppShell, Botao, Cartao, Etiqueta, estiloEntrada } from "@/components/AppShell";
+import { AppShell, Botao, Cartao, estiloEntrada } from "@/components/AppShell";
 import { Identificacao } from "@/components/Identificacao";
 import { usePerfilLocal } from "@/lib/perfil-local";
-import { lerProgramacaoPdf, type RegistroExtraido, type ResultadoLeitura } from "@/lib/pdf/parser";
-import { REGIONAIS, rotuloRegional } from "@/lib/regionais";
-import { importarProgramacao, listarRegionais, verificarArquivo } from "@/lib/programacao.functions";
+import { lerProgramacaoPdf, type ResultadoLeitura } from "@/lib/pdf/parser";
+import { rotuloRegional } from "@/lib/regionais";
+import { criarImportacao, verificarHashImportacao } from "@/lib/importacoes.functions";
 
 export const Route = createFileRoute("/programacao/importar")({
   head: () => ({
@@ -23,28 +23,49 @@ export const Route = createFileRoute("/programacao/importar")({
       { property: "og:title", content: "Importar programação em PDF" },
       {
         property: "og:description",
-        content: "Cada linha do PDF é interpretada e classificada por regional antes de salvar.",
+        content: "Cada linha do PDF é interpretada e fica em conferência até você aprovar.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ImportarPagina,
 });
 
-type Modo = "novo" | "somente_novos" | "nova_versao" | "substituir";
+type Duplicidade = {
+  jaImportado: boolean;
+  importacoes: Array<{
+    id: string;
+    nome_arquivo: string;
+    status: string;
+    versao: number;
+    criado_em: string;
+    total_registros: number;
+    usuario_nome: string | null;
+  }>;
+};
+
+async function arquivoParaBase64(arquivo: File) {
+  const bytes = new Uint8Array(await arquivo.arrayBuffer());
+  let binario = "";
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binario += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return btoa(binario);
+}
 
 function ImportarPagina() {
   const { perfil, carregado, salvar } = usePerfilLocal();
+  const navegar = useNavigate();
 
   const [lendo, setLendo] = useState(false);
   const [progresso, setProgresso] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ResultadoLeitura | null>(null);
-  const [registros, setRegistros] = useState<RegistroExtraido[]>([]);
-  const [duplicado, setDuplicado] = useState<{ jaImportado: boolean; arquivos: unknown[] } | null>(null);
-  const [modo, setModo] = useState<Modo>("novo");
-  const [tipoPeriodo, setTipoPeriodo] = useState("diaria");
-  const [somenteRevisao, setSomenteRevisao] = useState(false);
+  const [base64, setBase64] = useState<string | null>(null);
+  const [duplicidade, setDuplicidade] = useState<Duplicidade | null>(null);
+  const [tipoPeriodo, setTipoPeriodo] = useState("semanal");
 
-  useQuery({ queryKey: ["regionais"], queryFn: () => listarRegionais() });
+  const registros = resultado?.registros ?? [];
 
   const porRegional = useMemo(() => {
     const mapa = new Map<string, number>();
@@ -58,21 +79,19 @@ function ImportarPagina() {
   const comProblema = registros.filter((r) => r.precisaRevisao).length;
   const semRegional = registros.filter((r) => !r.regional_codigo).length;
 
-  const importar = useMutation({
+  const enviar = useMutation({
     mutationFn: () =>
-      importarProgramacao({
+      criarImportacao({
         data: {
           funcionarioId: perfil!.id,
-          modo,
           arquivo: {
             nome: resultado!.nomeArquivo,
             hash: resultado!.hash,
-            periodo:
-              resultado!.periodo.inicio && resultado!.periodo.fim
-                ? `${resultado!.periodo.inicio} a ${resultado!.periodo.fim}`
-                : null,
+            periodo_inicio: resultado!.periodo.inicio,
+            periodo_fim: resultado!.periodo.fim,
             tipo_periodo: tipoPeriodo,
             total_paginas: resultado!.totalPaginas,
+            conteudo_base64: base64,
           },
           registros: registros.map((r) => ({
             regional_codigo: r.regional_codigo,
@@ -97,12 +116,8 @@ function ImportarPagina() {
         },
       }),
     onSuccess: (r) => {
-      toast.success(
-        `Importação concluída: ${r.inseridos} registro(s) salvos${r.ignorados ? `, ${r.ignorados} repetido(s) ignorado(s)` : ""}.`,
-      );
-      setResultado(null);
-      setRegistros([]);
-      setDuplicado(null);
+      toast.success(`PDF processado: ${r.total} linha(s) em conferência.`);
+      void navegar({ to: "/importacoes/$id", params: { id: r.importacaoId } });
     },
     onError: (erro: Error) => toast.error(erro.message),
   });
@@ -110,18 +125,18 @@ function ImportarPagina() {
   async function aoSelecionarArquivo(arquivo: File) {
     setLendo(true);
     setResultado(null);
-    setRegistros([]);
-    setDuplicado(null);
+    setBase64(null);
+    setDuplicidade(null);
     try {
       const lido = await lerProgramacaoPdf(arquivo, (mensagem) => setProgresso(mensagem));
       setResultado(lido);
-      setRegistros(lido.registros);
-      const checagem = await verificarArquivo({ data: { hash: lido.hash } });
-      setDuplicado(checagem);
-      if (checagem.jaImportado) {
-        setModo("somente_novos");
-        toast.warning("Esta programação ou parte dela já foi importada.");
-      }
+      setProgresso("Guardando o arquivo original...");
+      setBase64(arquivo.size < 12_000_000 ? await arquivoParaBase64(arquivo) : null);
+      const checagem = (await verificarHashImportacao({
+        data: { hash: lido.hash },
+      })) as Duplicidade;
+      setDuplicidade(checagem);
+      if (checagem.jaImportado) toast.warning("Este mesmo PDF já foi processado antes.");
       if (lido.registros.length === 0) {
         toast.error("Nenhuma linha de programação foi reconhecida neste PDF.");
       }
@@ -133,27 +148,8 @@ function ImportarPagina() {
     }
   }
 
-  function corrigirRegional(chaveLocal: string, codigo: string) {
-    setRegistros((atual) =>
-      atual.map((r) =>
-        r.chaveLocal === chaveLocal
-          ? {
-              ...r,
-              regional_codigo: codigo || null,
-              regional_confirmada: !!codigo,
-              regional_origem: codigo ? "linha" : "nao_identificada",
-              motivosRevisao: r.motivosRevisao.filter((m) => m !== "Regional não confirmada"),
-              precisaRevisao: r.motivosRevisao.filter((m) => m !== "Regional não confirmada").length > 0,
-            }
-          : r,
-      ),
-    );
-  }
-
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
-
-  const listaVisivel = somenteRevisao ? registros.filter((r) => r.precisaRevisao) : registros;
 
   return (
     <AppShell perfil={perfil} titulo="Importar programação">
@@ -161,12 +157,10 @@ function ImportarPagina() {
         <Cartao className="space-y-3">
           <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-surface px-4 py-8 text-center">
             <FileUp className="size-8 text-primary" />
-            <span className="font-display text-lg font-semibold">
-              Importar programação em PDF
-            </span>
+            <span className="font-display text-lg font-semibold">Escolher PDF da programação</span>
             <span className="text-xs text-muted-foreground">
-              Diária, semanal, quinzenal, mensal ou extraordinária. O arquivo é lido inteiro e
-              separado por regional.
+              Diária, semanal, quinzenal, mensal ou extraordinária. O arquivo é lido inteiro, fica
+              guardado no sistema e nada entra na programação antes da sua conferência.
             </span>
             <input
               type="file"
@@ -180,7 +174,11 @@ function ImportarPagina() {
             />
           </label>
 
-          <select className={estiloEntrada} value={tipoPeriodo} onChange={(e) => setTipoPeriodo(e.target.value)}>
+          <select
+            className={estiloEntrada}
+            value={tipoPeriodo}
+            onChange={(e) => setTipoPeriodo(e.target.value)}
+          >
             <option value="diaria">Programação diária</option>
             <option value="semanal">Programação semanal</option>
             <option value="quinzenal">Programação quinzenal</option>
@@ -193,118 +191,107 @@ function ImportarPagina() {
               <Loader2 className="size-4 animate-spin" /> {progresso ?? "Lendo o arquivo..."}
             </p>
           ) : null}
+
+          <Botao variante="contorno" onClick={() => void navegar({ to: "/importacoes" })}>
+            <History className="size-4" /> Histórico de importações
+          </Botao>
         </Cartao>
 
         {resultado ? (
-          <>
-            <Cartao className="space-y-3">
-              <h2 className="font-display text-lg font-semibold">Resumo da leitura</h2>
-              <dl className="grid grid-cols-2 gap-2 text-sm">
-                <div><dt className="text-muted-foreground">Arquivo</dt><dd className="truncate font-medium">{resultado.nomeArquivo}</dd></div>
-                <div><dt className="text-muted-foreground">Páginas</dt><dd className="font-medium">{resultado.totalPaginas}</dd></div>
-                <div><dt className="text-muted-foreground">Período</dt><dd className="font-medium">{resultado.periodo.inicio ? `${resultado.periodo.inicio} a ${resultado.periodo.fim}` : "não identificado"}</dd></div>
-                <div><dt className="text-muted-foreground">Registros</dt><dd className="font-medium">{registros.length}</dd></div>
-                <div><dt className="text-muted-foreground">Com OCR</dt><dd className="font-medium">{resultado.paginasComOcr.length ? resultado.paginasComOcr.join(", ") : "nenhuma"}</dd></div>
-                <div><dt className="text-muted-foreground">Sem regional</dt><dd className="font-medium">{semRegional}</dd></div>
-              </dl>
-
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Registros por regional
-                </p>
-                {porRegional.map(([codigo, quantidade]) => (
-                  <div key={codigo} className="flex items-center justify-between rounded-md bg-surface px-3 py-2 text-sm">
-                    <span>{codigo === "SEM_REGIONAL" ? "Regional não confirmada" : rotuloRegional(codigo)}</span>
-                    <span className="font-semibold">{quantidade} registro(s)</span>
-                  </div>
-                ))}
+          <Cartao className="space-y-3">
+            <h2 className="font-display text-lg font-semibold">Resumo da leitura</h2>
+            <dl className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Arquivo</dt>
+                <dd className="truncate font-medium">{resultado.nomeArquivo}</dd>
               </div>
+              <div>
+                <dt className="text-muted-foreground">Páginas</dt>
+                <dd className="font-medium">{resultado.totalPaginas}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Período</dt>
+                <dd className="font-medium">
+                  {resultado.periodo.inicio
+                    ? `${resultado.periodo.inicio} a ${resultado.periodo.fim}`
+                    : "não identificado"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Linhas lidas</dt>
+                <dd className="font-medium">{registros.length}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Páginas com OCR</dt>
+                <dd className="font-medium">
+                  {resultado.paginasComOcr.length ? resultado.paginasComOcr.join(", ") : "nenhuma"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Sem regional</dt>
+                <dd className="font-medium">{semRegional}</dd>
+              </div>
+            </dl>
 
-              {comProblema > 0 ? (
-                <p className="flex items-start gap-2 rounded-md bg-warning/15 px-3 py-2 text-sm text-warning-foreground">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  {comProblema} registro(s) precisam de conferência. Nada é descartado
-                  automaticamente — revise abaixo antes de confirmar.
-                </p>
-              ) : null}
-
-              {duplicado?.jaImportado ? (
-                <div className="space-y-2 rounded-md bg-destructive/10 px-3 py-2">
-                  <p className="text-sm font-semibold text-destructive">
-                    Esta programação ou parte dela já foi importada.
-                  </p>
-                  <select className={estiloEntrada} value={modo} onChange={(e) => setModo(e.target.value as Modo)}>
-                    <option value="somente_novos">Importar somente novos registros</option>
-                    <option value="nova_versao">Criar nova versão</option>
-                    <option value="substituir">Substituir importação anterior</option>
-                  </select>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Linhas por regional
+              </p>
+              {porRegional.map(([codigo, quantidade]) => (
+                <div
+                  key={codigo}
+                  className="flex items-center justify-between rounded-md bg-surface px-3 py-2 text-sm"
+                >
+                  <span>
+                    {codigo === "SEM_REGIONAL" ? "Regional não identificada" : rotuloRegional(codigo)}
+                  </span>
+                  <span className="font-semibold">{quantidade} linha(s)</span>
                 </div>
-              ) : null}
-
-              <div className="flex flex-wrap gap-2">
-                <Botao
-                  disabled={importar.isPending || registros.length === 0}
-                  onClick={() => importar.mutate()}
-                >
-                  {importar.isPending ? "Salvando..." : "Confirmar importação"}
-                </Botao>
-                <Botao variante="contorno" onClick={() => setSomenteRevisao((v) => !v)}>
-                  {somenteRevisao ? "Ver todos" : `Revisar (${comProblema})`}
-                </Botao>
-                <Botao
-                  variante="perigo"
-                  onClick={() => {
-                    setResultado(null);
-                    setRegistros([]);
-                    setDuplicado(null);
-                  }}
-                >
-                  Cancelar
-                </Botao>
-              </div>
-            </Cartao>
-
-            <div className="space-y-2">
-              {listaVisivel.slice(0, 300).map((r) => (
-                <Cartao key={r.chaveLocal} className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-display font-semibold">{r.rodovia ?? "Rodovia?"}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {r.km_inicial ?? "?"} → {r.km_final ?? "?"}
-                    </span>
-                    <Etiqueta tom={r.regional_codigo ? "ok" : "erro"}>
-                      {r.regional_codigo ? rotuloRegional(r.regional_codigo) : "Sem regional"}
-                    </Etiqueta>
-                    <Etiqueta tom="neutro">pág. {r.pagina_pdf}</Etiqueta>
-                  </div>
-
-                  <p className="line-clamp-2 text-xs text-muted-foreground">{r.linha_bruta}</p>
-
-                  {r.motivosRevisao.length ? (
-                    <p className="text-xs text-destructive">{r.motivosRevisao.join(" • ")}</p>
-                  ) : null}
-
-                  <select
-                    className={estiloEntrada}
-                    value={r.regional_codigo ?? ""}
-                    onChange={(e) => corrigirRegional(r.chaveLocal, e.target.value)}
-                  >
-                    <option value="">Regional não confirmada</option>
-                    {REGIONAIS.map((reg) => (
-                      <option key={reg.codigo} value={reg.codigo}>
-                        {reg.rotulo}
-                      </option>
-                    ))}
-                  </select>
-                </Cartao>
               ))}
-              {listaVisivel.length > 300 ? (
-                <p className="text-center text-xs text-muted-foreground">
-                  Exibindo os 300 primeiros de {listaVisivel.length} registros.
-                </p>
-              ) : null}
             </div>
-          </>
+
+            {comProblema > 0 ? (
+              <p className="flex items-start gap-2 rounded-md bg-warning/15 px-3 py-2 text-sm text-warning-foreground">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                {comProblema} linha(s) vão para a lista "Em conferência". Nada é descartado: você
+                corrige na próxima tela.
+              </p>
+            ) : null}
+
+            {duplicidade?.jaImportado ? (
+              <div className="space-y-2 rounded-md bg-destructive/10 px-3 py-2 text-sm">
+                <p className="font-semibold text-destructive">Este PDF já foi importado antes.</p>
+                {duplicidade.importacoes.slice(0, 3).map((i) => (
+                  <p key={i.id} className="text-xs text-muted-foreground">
+                    versão {i.versao} · {i.status.replace(/_/g, " ")} ·{" "}
+                    {new Date(i.criado_em).toLocaleString("pt-BR")} · {i.total_registros} linha(s)
+                  </p>
+                ))}
+                <p className="text-xs">
+                  Se continuar, o sistema cria uma nova versão e mantém a anterior no histórico.
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <Botao
+                disabled={enviar.isPending || registros.length === 0}
+                onClick={() => enviar.mutate()}
+              >
+                {enviar.isPending ? "Processando..." : "Processar e conferir"}
+              </Botao>
+              <Botao
+                variante="perigo"
+                onClick={() => {
+                  setResultado(null);
+                  setBase64(null);
+                  setDuplicidade(null);
+                }}
+              >
+                Cancelar
+              </Botao>
+            </div>
+          </Cartao>
         ) : null}
       </div>
     </AppShell>
