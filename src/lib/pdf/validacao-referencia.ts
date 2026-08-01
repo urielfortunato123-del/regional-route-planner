@@ -45,7 +45,9 @@ const normaliza = (t: string) =>
   t
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 
 export function encontrarExpectativa(nomeArquivo: string): Expectativa | null {
   const alvo = normaliza(nomeArquivo);
