@@ -243,6 +243,9 @@ function ConferenciaPagina() {
               <Botao variante="contorno" onClick={() => novaVersao.mutate()}>
                 <Copy className="size-4" /> Nova versão para editar
               </Botao>
+              <Link to="/importacoes/auditoria/$id" params={{ id }}>
+                <Botao variante="contorno">Auditoria</Botao>
+              </Link>
               <Link to="/importacoes">
                 <Botao variante="contorno">Histórico</Botao>
               </Link>
