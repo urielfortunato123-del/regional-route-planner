@@ -524,36 +524,31 @@ export const atualizarStatusImportacao = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const excluirImportacao = createServerFn({ method: "POST" })
+/** Remove somente o arquivo PDF guardado, preservando os dados processados. */
+export const removerPdfImportacao = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
-    z
-      .object({
-        funcionarioId: z.string().uuid(),
-        importacaoId: z.string().uuid(),
-        excluirProgramacoes: z.boolean().default(true),
-      })
-      .parse(d),
+    z.object({ funcionarioId: z.string().uuid(), importacaoId: z.string().uuid() }).parse(d),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { carregarPerfil } = await import("@/lib/programacao.server");
-    const { BUCKET_PDF, carregarImportacao } = await import("@/lib/importacoes.server");
+    const { apagarArquivoPdf } = await import("@/lib/importacoes.server");
     await carregarPerfil(data.funcionarioId);
-
-    const importacao = await carregarImportacao(data.importacaoId);
-    if (data.excluirProgramacoes) {
-      await supabaseAdmin.from("programacoes").delete().eq("importacao_id", data.importacaoId);
-    }
-    if (importacao.caminho_arquivo) {
-      await supabaseAdmin.storage.from(BUCKET_PDF).remove([importacao.caminho_arquivo]);
-    }
-    const { error } = await supabaseAdmin
-      .from("importacoes_pdf")
-      .delete()
-      .eq("id", data.importacaoId);
-    if (error) throw new Error(error.message);
-    return { ok: true };
+    return apagarArquivoPdf(data.importacaoId);
   });
+
+/** Limpeza total: PDF, linhas lidas, programação, rotas, inspeções e ocorrências. */
+export const excluirImportacao = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ funcionarioId: z.string().uuid(), importacaoId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const { purgarImportacao } = await import("@/lib/importacoes.server");
+    await carregarPerfil(data.funcionarioId);
+    const resultado = await purgarImportacao(data.importacaoId);
+    return { ok: true, ...resultado };
+  });
+
 
 export const listarImportacoes = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>

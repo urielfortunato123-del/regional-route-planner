@@ -116,3 +116,107 @@ export async function recalcularTotais(importacaoId: string) {
     .eq("id", importacaoId);
   return { total: linhas.length, erros, regionais };
 }
+
+/** Apaga somente o PDF guardado; os dados processados continuam disponíveis. */
+export async function apagarArquivoPdf(importacaoId: string) {
+  const importacao = await carregarImportacao(importacaoId);
+  if (!importacao.caminho_arquivo) return { removido: false };
+  await supabaseAdmin.storage.from(BUCKET_PDF).remove([importacao.caminho_arquivo]);
+  const { error } = await supabaseAdmin
+    .from("importacoes_pdf")
+    .update({ caminho_arquivo: null })
+    .eq("id", importacaoId);
+  if (error) throw new Error(error.message);
+  return { removido: true };
+}
+
+/**
+ * Limpeza total de uma importação: PDF, texto/OCR guardado nas linhas,
+ * programação gerada, rotas, inspeções e ocorrências vinculadas.
+ */
+export async function purgarImportacao(importacaoId: string) {
+  const importacao = await carregarImportacao(importacaoId);
+
+  const { data: programacoes } = await supabaseAdmin
+    .from("programacoes")
+    .select("id")
+    .eq("importacao_id", importacaoId);
+  const idsProgramacao = (programacoes ?? []).map((p) => p.id);
+
+  const rotasAtingidas = new Set<string>();
+  let inspecoes = 0;
+  let ocorrencias = 0;
+
+  for (let i = 0; i < idsProgramacao.length; i += 200) {
+    const fatia = idsProgramacao.slice(i, i + 200);
+
+    const { data: itens } = await supabaseAdmin
+      .from("rota_itens")
+      .select("rota_id")
+      .in("programacao_id", fatia);
+    for (const item of itens ?? []) if (item.rota_id) rotasAtingidas.add(item.rota_id);
+
+    const { data: insp } = await supabaseAdmin
+      .from("inspecoes")
+      .select("id")
+      .in("programacao_id", fatia);
+    inspecoes += insp?.length ?? 0;
+    const { data: ocor } = await supabaseAdmin
+      .from("ocorrencias")
+      .select("id")
+      .in("programacao_id", fatia);
+    ocorrencias += ocor?.length ?? 0;
+
+    await supabaseAdmin.from("rota_itens").delete().in("programacao_id", fatia);
+    await supabaseAdmin.from("inspecoes").delete().in("programacao_id", fatia);
+    await supabaseAdmin.from("ocorrencias").delete().in("programacao_id", fatia);
+    await supabaseAdmin.from("programacao_eventos").delete().in("programacao_id", fatia);
+  }
+
+  const { data: rotasDaImportacao } = await supabaseAdmin
+    .from("rotas")
+    .select("id")
+    .eq("importacao_id", importacaoId);
+  for (const r of rotasDaImportacao ?? []) rotasAtingidas.add(r.id);
+
+  const listaRotas = [...rotasAtingidas];
+  for (let i = 0; i < listaRotas.length; i += 200) {
+    const fatia = listaRotas.slice(i, i + 200);
+    await supabaseAdmin.from("rota_itens").delete().in("rota_id", fatia);
+    await supabaseAdmin.from("rotas").delete().in("id", fatia);
+  }
+
+  await supabaseAdmin.from("programacoes").delete().eq("importacao_id", importacaoId);
+  await supabaseAdmin.from("importacao_registros").delete().eq("importacao_id", importacaoId);
+
+  if (importacao.caminho_arquivo) {
+    await supabaseAdmin.storage.from(BUCKET_PDF).remove([importacao.caminho_arquivo]);
+  }
+
+  const { error } = await supabaseAdmin
+    .from("importacoes_pdf")
+    .delete()
+    .eq("id", importacaoId);
+  if (error) throw new Error(error.message);
+
+  // O cabeçalho do arquivo só é apagado quando nenhuma outra importação o usa.
+  if (importacao.arquivo_id) {
+    const { data: aindaUsado } = await supabaseAdmin
+      .from("importacoes_pdf")
+      .select("id")
+      .eq("arquivo_id", importacao.arquivo_id)
+      .limit(1);
+    if (!aindaUsado?.length) {
+      await supabaseAdmin.from("arquivos_programacao").delete().eq("id", importacao.arquivo_id);
+    }
+  }
+
+  return {
+    programacoes: idsProgramacao.length,
+    rotas: listaRotas.length,
+    inspecoes,
+    ocorrencias,
+    idsProgramacao,
+  };
+}
+

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Copy, FileDown, Loader2, Pencil, RotateCcw, Trash2 } from "lucide-react";
 
 import { AppShell, Botao, Cartao, Etiqueta, estiloEntrada } from "@/components/AppShell";
+import { AcoesImportacao } from "@/components/importacoes/AcoesImportacao";
 import { Identificacao } from "@/components/Identificacao";
 import { usePerfilLocal } from "@/lib/perfil-local";
 import { REGIONAIS, rotuloRegional } from "@/lib/regionais";
@@ -237,6 +238,14 @@ function ConferenciaPagina() {
                 <Botao variante="contorno">Histórico</Botao>
               </Link>
             </div>
+            <AcoesImportacao
+              funcionarioId={perfil.id}
+              importacaoId={id}
+              nomeArquivo={importacao.nome_arquivo}
+              temPdf={importacao.caminho_arquivo != null}
+              mostrarConferir={false}
+            />
+
             {emConferencia > 0 ? (
               <p className="flex items-start gap-2 rounded-md bg-warning/15 px-3 py-2 text-xs text-warning-foreground">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />

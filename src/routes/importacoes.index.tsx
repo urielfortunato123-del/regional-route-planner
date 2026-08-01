@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 
 import { AppShell, Botao, Cartao, Etiqueta, estiloEntrada } from "@/components/AppShell";
+import { AcoesImportacao } from "@/components/importacoes/AcoesImportacao";
 import { Identificacao } from "@/components/Identificacao";
 import { usePerfilLocal } from "@/lib/perfil-local";
 import { rotuloRegional } from "@/lib/regionais";
@@ -42,6 +43,7 @@ const SITUACOES: Record<string, { rotulo: string; tom: "ok" | "alerta" | "erro" 
 type Importacao = {
   id: string;
   nome_arquivo: string;
+  caminho_arquivo?: string | null;
   periodo_inicio: string | null;
   periodo_fim: string | null;
   status: string;
@@ -148,8 +150,8 @@ function HistoricoPagina() {
         {exibidas.map((i) => {
           const situacao = SITUACOES[i.status] ?? { rotulo: i.status, tom: "neutro" as const };
           return (
-            <Link key={i.id} to="/importacoes/$id" params={{ id: i.id }} className="block">
-              <Cartao className="space-y-2">
+            <Cartao key={i.id} className="space-y-2">
+              <Link to="/importacoes/$id" params={{ id: i.id }} className="block space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-display font-semibold">{i.nome_arquivo}</span>
                   <Etiqueta tom={situacao.tom}>{situacao.rotulo}</Etiqueta>
@@ -173,10 +175,21 @@ function HistoricoPagina() {
                     </Etiqueta>
                   ))}
                 </div>
-              </Cartao>
-            </Link>
+              </Link>
+              <AcoesImportacao
+                funcionarioId={perfil.id}
+                importacaoId={i.id}
+                nomeArquivo={i.nome_arquivo}
+                temPdf={i.caminho_arquivo != null}
+                aoLimpar={() => {
+                  setOffline(null);
+                  void consulta.refetch();
+                }}
+              />
+            </Cartao>
           );
         })}
+
 
         {!consulta.isLoading && exibidas.length === 0 ? (
           <Cartao>
