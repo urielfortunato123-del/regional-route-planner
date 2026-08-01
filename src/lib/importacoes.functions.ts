@@ -38,7 +38,13 @@ export const criarImportacao = createServerFn({ method: "POST" })
               observacao: z.string().nullable(),
               pagina_pdf: z.number().int(),
               linha_bruta: z.string().nullable(),
+              status_conferencia: z.string().nullable().optional(),
+              motivo_conferencia: z.string().nullable().optional(),
+              data_fora_periodo: z.boolean().optional(),
+              periodo_inicio_esperado: z.string().nullable().optional(),
+              periodo_fim_esperado: z.string().nullable().optional(),
             }),
+
           )
           .min(1)
           .max(5000),
@@ -161,8 +167,14 @@ export const criarImportacao = createServerFn({ method: "POST" })
         duplicado,
         status_validacao: valido ? ("valido" as const) : ("revisar" as const),
         motivos,
+        status_conferencia: r.status_conferencia ?? (valido ? "OK" : "DADOS_INCOMPLETOS"),
+        motivo_conferencia: r.motivo_conferencia ?? (motivos.join(" · ") || null),
+        data_fora_periodo: r.data_fora_periodo ?? false,
+        periodo_inicio_esperado: r.periodo_inicio_esperado ?? data.arquivo.periodo_inicio ?? null,
+        periodo_fim_esperado: r.periodo_fim_esperado ?? data.arquivo.periodo_fim ?? null,
       };
     });
+
 
     for (let i = 0; i < linhas.length; i += 400) {
       const { error } = await supabaseAdmin
@@ -251,7 +263,8 @@ export const editarRegistroImportacao = createServerFn({ method: "POST" })
       COLUNAS_REGISTRO_IMPORTACAO,
     } = await import("@/lib/importacoes.server");
 
-    await carregarPerfil(data.funcionarioId);
+    const perfil = await carregarPerfil(data.funcionarioId);
+
     const { data: atual, error: erroBusca } = await supabaseAdmin
       .from("importacao_registros")
       .select(COLUNAS_REGISTRO_IMPORTACAO)
@@ -276,6 +289,23 @@ export const editarRegistroImportacao = createServerFn({ method: "POST" })
       duplicado: atual.duplicado,
     });
 
+    // recalcula a divergência de data em relação ao período declarado no PDF
+    const inicioEsperado = (atual as { periodo_inicio_esperado?: string | null })
+      .periodo_inicio_esperado;
+    const fimEsperado = (atual as { periodo_fim_esperado?: string | null }).periodo_fim_esperado;
+    const dataAtual = atualizado.data_inicial ?? null;
+    const foraDoPeriodo =
+      !!inicioEsperado && !!fimEsperado && !!dataAtual
+        ? dataAtual < inicioEsperado || dataAtual > fimEsperado
+        : false;
+    const statusConferencia = foraDoPeriodo
+      ? "DATA_FORA_DO_PERIODO_CONFERIR"
+      : valido
+        ? "OK"
+        : atualizado.regional_codigo
+          ? "DADOS_INCOMPLETOS"
+          : "REGIONAL_NAO_IDENTIFICADA";
+
     const { error } = await supabaseAdmin
       .from("importacao_registros")
       .update({
@@ -286,13 +316,23 @@ export const editarRegistroImportacao = createServerFn({ method: "POST" })
         regional_confirmada: !!atualizado.regional_codigo,
         regional_origem: data.campos.regional_codigo ? "confirmacao_manual" : atual.regional_origem,
         chave_duplicidade: chaveDoRegistro(atualizado as never),
-        status_validacao: valido ? "valido" : "revisar",
-        motivos,
+        status_validacao: valido && !foraDoPeriodo ? "valido" : "revisar",
+        motivos: foraDoPeriodo
+          ? [...motivos, `Data ${dataAtual} fora do período ${inicioEsperado} a ${fimEsperado} — conferir`]
+          : motivos,
+        status_conferencia: statusConferencia,
+        data_fora_periodo: foraDoPeriodo,
+        motivo_conferencia: foraDoPeriodo
+          ? `Data ${dataAtual} fora do período ${inicioEsperado} a ${fimEsperado}`
+          : (motivos.join(" · ") || null),
         campos_corrigidos: [...corrigidos],
         foi_corrigido: corrigidos.size > 0,
+        conferido_em: new Date().toISOString(),
+        conferido_por: perfil.nome,
       } as never)
       .eq("id", data.registroId);
     if (error) throw new Error(error.message);
+
 
     await recalcularTotais(atual.importacao_id);
     return { ok: true, valido, motivos };
@@ -475,6 +515,20 @@ export const confirmarImportacao = createServerFn({ method: "POST" })
           pagina_pdf: r.pagina_pdf,
           linha_bruta: r.texto_original,
           chave_duplicidade: r.chave_duplicidade,
+          status_conferencia: (r as { status_conferencia?: string }).status_conferencia ?? "OK",
+          motivo_conferencia: (r as { motivo_conferencia?: string | null }).motivo_conferencia ?? null,
+          data_fora_periodo: (r as { data_fora_periodo?: boolean }).data_fora_periodo ?? false,
+          periodo_inicio_esperado:
+            (r as { periodo_inicio_esperado?: string | null }).periodo_inicio_esperado ??
+            importacao.periodo_inicio ??
+            null,
+          periodo_fim_esperado:
+            (r as { periodo_fim_esperado?: string | null }).periodo_fim_esperado ??
+            importacao.periodo_fim ??
+            null,
+          conferido_em: (r as { conferido_em?: string | null }).conferido_em ?? null,
+          conferido_por: (r as { conferido_por?: string | null }).conferido_por ?? null,
+
         })
         .select("id")
         .single();
@@ -685,6 +739,14 @@ export const duplicarImportacao = createServerFn({ method: "POST" })
       motivos: r.motivos,
       campos_corrigidos: r.campos_corrigidos,
       foi_corrigido: r.foi_corrigido,
+      status_conferencia: (r as { status_conferencia?: string }).status_conferencia ?? "OK",
+      motivo_conferencia: (r as { motivo_conferencia?: string | null }).motivo_conferencia ?? null,
+      data_fora_periodo: (r as { data_fora_periodo?: boolean }).data_fora_periodo ?? false,
+      periodo_inicio_esperado:
+        (r as { periodo_inicio_esperado?: string | null }).periodo_inicio_esperado ?? null,
+      periodo_fim_esperado:
+        (r as { periodo_fim_esperado?: string | null }).periodo_fim_esperado ?? null,
+
     }));
     for (let i = 0; i < copias.length; i += 400) {
       const { error: erroCopia } = await supabaseAdmin
@@ -723,4 +785,105 @@ export const diasDaProgramacao = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     return { perfil, dias: montarDias(registros ?? []) };
+  });
+
+/**
+ * Ações em lote na conferência — pensadas para as datas divergentes.
+ *
+ * "aceitar_datas" mantém a data lida do PDF e libera a linha;
+ * "ajustar_para_inicio"/"ajustar_para_fim" trazem a data para dentro do
+ * período declarado; "marcar_revisar" devolve o lote para conferência.
+ */
+export const acaoEmLoteConferencia = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        funcionarioId: z.string().uuid(),
+        importacaoId: z.string().uuid(),
+        acao: z.enum(["aceitar_datas", "ajustar_para_inicio", "ajustar_para_fim", "marcar_revisar"]),
+        alvo: z.enum(["data_fora_periodo", "selecionados"]).default("data_fora_periodo"),
+        registroIds: z.array(z.string().uuid()).max(5000).default([]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const { avaliarRegistro, recalcularTotais, COLUNAS_REGISTRO_IMPORTACAO, carregarImportacao } =
+      await import("@/lib/importacoes.server");
+
+    const perfil = await carregarPerfil(data.funcionarioId);
+    const importacao = await carregarImportacao(data.importacaoId);
+
+    let consulta = supabaseAdmin
+      .from("importacao_registros")
+      .select(COLUNAS_REGISTRO_IMPORTACAO)
+      .eq("importacao_id", data.importacaoId);
+    if (data.alvo === "selecionados") consulta = consulta.in("id", data.registroIds);
+    else consulta = consulta.eq("data_fora_periodo", true);
+
+    const { data: registros, error } = await consulta;
+    if (error) throw new Error(error.message);
+
+    const agora = new Date().toISOString();
+    const novaData =
+      data.acao === "ajustar_para_inicio"
+        ? importacao.periodo_inicio
+        : data.acao === "ajustar_para_fim"
+          ? importacao.periodo_fim
+          : null;
+
+    let alterados = 0;
+    for (const r of registros ?? []) {
+      const dataInicial = novaData ?? r.data_inicial;
+      const { valido, motivos } = avaliarRegistro({
+        ...r,
+        data_inicial: dataInicial,
+        km_inicial: r.km_inicial == null ? null : Number(r.km_inicial),
+        km_final: r.km_final == null ? null : Number(r.km_final),
+        duplicado: false,
+      });
+
+      const revisar = data.acao === "marcar_revisar";
+      const { error: erroUpdate } = await supabaseAdmin
+        .from("importacao_registros")
+        .update({
+          ...(novaData ? { data_inicial: novaData, data_final: novaData } : {}),
+          data_fora_periodo: revisar ? true : false,
+          status_conferencia: revisar
+            ? "DATA_FORA_DO_PERIODO_CONFERIR"
+            : valido
+              ? "OK"
+              : "DADOS_INCOMPLETOS",
+          status_validacao: revisar ? "revisar" : valido ? "valido" : "revisar",
+          motivos: revisar ? ["Data fora do período — conferir"] : motivos,
+          motivo_conferencia: revisar
+            ? "Data fora do período informado no PDF"
+            : data.acao === "aceitar_datas"
+              ? `Data ${r.data_inicial} mantida e aceita na conferência`
+              : `Data ajustada para ${novaData} na conferência`,
+          conferido_em: agora,
+          conferido_por: perfil.nome,
+        } as never)
+        .eq("id", r.id);
+      if (erroUpdate) throw new Error(erroUpdate.message);
+
+      // mantém o serviço já promovido em sincronia com a conferência
+      if (r.programacao_id) {
+        await supabaseAdmin
+          .from("programacoes")
+          .update({
+            ...(novaData ? { data_inicial: novaData, data_final: novaData } : {}),
+            data_fora_periodo: revisar,
+            status_conferencia: revisar ? "DATA_FORA_DO_PERIODO_CONFERIR" : "OK",
+            conferido_em: agora,
+            conferido_por: perfil.nome,
+          } as never)
+          .eq("id", r.programacao_id);
+      }
+      alterados += 1;
+    }
+
+    await recalcularTotais(data.importacaoId);
+    return { ok: true, alterados };
   });

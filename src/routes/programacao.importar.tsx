@@ -10,6 +10,7 @@ import { usePerfilLocal } from "@/lib/perfil-local";
 import { lerProgramacaoPdf, type ResultadoLeitura } from "@/lib/pdf/parser";
 import { rotuloRegional } from "@/lib/regionais";
 import { criarImportacao, verificarHashImportacao } from "@/lib/importacoes.functions";
+import { validarLeitura } from "@/lib/pdf/validacao-referencia";
 
 export const Route = createFileRoute("/programacao/importar")({
   head: () => ({
@@ -78,6 +79,20 @@ function ImportarPagina() {
 
   const comProblema = registros.filter((r) => r.precisaRevisao).length;
   const semRegional = registros.filter((r) => !r.regional_codigo).length;
+  const datasDivergentes = registros.filter((r) => r.data_fora_periodo).length;
+  const validacao = useMemo(
+    () =>
+      resultado
+        ? validarLeitura(
+            resultado.nomeArquivo,
+            resultado.totalPaginas,
+            registros,
+            resultado.diagnostico ?? [],
+          )
+        : null,
+    [resultado, registros],
+  );
+
 
   const enviar = useMutation({
     mutationFn: () =>
@@ -112,7 +127,13 @@ function ImportarPagina() {
             observacao: r.observacao,
             pagina_pdf: r.pagina_pdf,
             linha_bruta: r.linha_bruta,
+            status_conferencia: r.status_conferencia,
+            motivo_conferencia: r.motivo_conferencia,
+            data_fora_periodo: r.data_fora_periodo,
+            periodo_inicio_esperado: r.periodo_inicio_esperado ?? resultado!.periodo.inicio,
+            periodo_fim_esperado: r.periodo_fim_esperado ?? resultado!.periodo.fim,
           })),
+
         },
       }),
     onSuccess: (r) => {
@@ -231,7 +252,38 @@ function ImportarPagina() {
                 <dt className="text-muted-foreground">Sem regional</dt>
                 <dd className="font-medium">{semRegional}</dd>
               </div>
+              <div>
+                <dt className="text-muted-foreground">Data fora do período</dt>
+                <dd className="font-medium">{datasDivergentes}</dd>
+              </div>
             </dl>
+
+            {datasDivergentes > 0 ? (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                {datasDivergentes} linha(s) com data fora do período{" "}
+                {resultado.periodo.inicio
+                  ? `${resultado.periodo.inicio} a ${resultado.periodo.fim}`
+                  : "declarado"}
+                . Nada foi descartado: essas linhas entram como
+                <strong> DATA_FORA_DO_PERIODO_CONFERIR</strong> para você conferir.
+              </p>
+            ) : null}
+
+            {validacao ? (
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Validação da leitura{validacao.aplicavel ? " (arquivo de referência)" : ""}
+                </p>
+                <ul className="mt-1 space-y-1 text-xs">
+                  {validacao.itens.map((item) => (
+                    <li key={item.titulo} className={item.ok ? "" : "text-destructive"}>
+                      {item.ok ? "✓" : "✗"} {item.titulo}: esperado {item.esperado}, encontrado{" "}
+                      {item.encontrado}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
