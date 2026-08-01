@@ -223,7 +223,7 @@ function extrairPorAncoras(texto: string): Partial<Record<CampoTabela, string>> 
     if (equipe) saida.equipe = equipe;
 
     const meio = linha.slice(mRegional.index + mRegional[0].length, inicioRodovia).trim();
-    const mContrato = meio.match(RE_CONTRATO);
+    const mContrato = meio.match(RE_CONTRATO) ?? meio.match(/\(\s*RC[^)]*\)/i);
     if (mContrato && mContrato.index !== undefined) {
       const categoria = meio.slice(0, mContrato.index).trim();
       if (categoria) saida.categoria = categoria;
