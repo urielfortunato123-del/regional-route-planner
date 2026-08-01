@@ -13,7 +13,7 @@ describe("leitura do arquivo de referência ME2 Itapetininga", () => {
   it("reconhece exatamente 10 serviços da CGR.3 – Bauru na página 3", () => {
     const { registros } = ler();
     const bauruPagina3 = registros.filter(
-      (r) => r.pagina_pdf === 3 && r.regional_codigo === "CGR.3",
+      (r) => r.pagina_pdf === 3 && r.regional_codigo === "CGR_03_BAURU",
     );
     expect(bauruPagina3).toHaveLength(10);
     expect(bauruPagina3.every((r) => r.rodovia && r.km_inicial != null)).toBe(true);
@@ -21,8 +21,8 @@ describe("leitura do arquivo de referência ME2 Itapetininga", () => {
 
   it("identifica a regional linha a linha, sem herdar de outra página", () => {
     const { registros } = ler();
-    expect(registros.filter((r) => r.pagina_pdf === 1 && r.regional_codigo === "CGR.1")).toHaveLength(2);
-    expect(registros.filter((r) => r.pagina_pdf === 2 && r.regional_codigo === "CGR.13")).toHaveLength(3);
+    expect(registros.filter((r) => r.pagina_pdf === 1 && r.regional_codigo === "CGR_02_ITAPETININGA")).toHaveLength(2);
+    expect(registros.filter((r) => r.pagina_pdf === 2 && r.regional_codigo === "CGR_13_RIO_CLARO")).toHaveLength(3);
     expect(registros.some((r) => !r.regional_codigo)).toBe(false);
   });
 
@@ -48,7 +48,7 @@ describe("leitura do arquivo de referência ME2 Itapetininga", () => {
     const { registros, diagnostico } = ler();
     const resultado = validarLeitura(NOME_ARQUIVO_REFERENCIA, 3, registros, diagnostico);
     expect(resultado.aplicavel).toBe(true);
-    expect(resultado.itens.find((i) => i.titulo === "Página 3 · CGR.3")?.encontrado).toBe(10);
+    expect(resultado.itens.find((i) => i.titulo === "Página 3 · CGR_03_BAURU")?.encontrado).toBe(10);
     expect(resultado.aprovado).toBe(true);
   });
 });

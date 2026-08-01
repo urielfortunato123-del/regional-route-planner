@@ -16,13 +16,13 @@ const CABECALHO = [
 
 const RODAPE = ["DIRETORIA DE OPERAÇÕES-D.O VERSÃO:31/07/2026"];
 
-/** Página 1 — CGR.1 Itapetininga. */
+/** Página 1 — CGR.2 Itapetininga. */
 export const PAGINA_1 = [
   ...CABECALHO,
   "ACOMP. SERVIÇOS / OCORRÊNCIAS",
-  "Luciano/ Uriel CGR.1 - Itapetininga Conservação de Rotina 22.779-1 - A3F Engenharia Ltda (RC 1.1) Ocorrências SP 127 130,000 145,500 3/8/2026 3/8/2026 10",
+  "Luciano/ Uriel CGR.2 - Itapetininga Conservação de Rotina 22.779-1 - A3F Engenharia Ltda (RC 2.1) Ocorrências SP 127 130,000 145,500 3/8/2026 3/8/2026 10",
   "GERAL",
-  "Luciano/ Uriel CGR.1 - Itapetininga Conservação de Rotina (RC 1.2) Ocorrências SP 258 200,000 214,300 ACOMP. SERVIÇOS / TOLERÂNCIA ZERO 4/8/2026 4/8/2026 1",
+  "Luciano/ Uriel CGR.2 - Itapetininga Conservação de Rotina (RC 2.2) Ocorrências SP 258 200,000 214,300 ACOMP. SERVIÇOS / TOLERÂNCIA ZERO 4/8/2026 4/8/2026 1",
   ...RODAPE,
 ];
 

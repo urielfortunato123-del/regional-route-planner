@@ -21,7 +21,7 @@ export const EXPECTATIVAS: Expectativa[] = [
     arquivo: "03-08-26 a 07-08-26",
     descricao: "PLANEJAMENTO DE PROGRAMAÇÕES ME2 ITAPÊ – 03-08-26 a 07-08-26 (ATUAL)",
     totalPaginas: 3,
-    porPaginaRegional: [{ pagina: 3, regional: "CGR.3", esperado: 10 }],
+    porPaginaRegional: [{ pagina: 3, regional: "CGR_03_BAURU", esperado: 10 }],
   },
 ];
 
