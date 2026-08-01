@@ -98,12 +98,19 @@ const SINONIMOS: Array<{ campo: CampoTabela; termos: string[] }> = [
   { campo: "observacao", termos: ["observacao", "obs", "observacoes"] },
 ];
 
+/**
+ * Classifica a célula de um possível cabeçalho de tabela.
+ * Casamento estrito: nada de "includes", senão células de dados como
+ * "ACOMP. SERVIÇOS / TOLERÂNCIA ZERO" seriam lidas como cabeçalho e a linha
+ * inteira (com sua regional) seria descartada.
+ */
 function classificarCabecalho(texto: string): CampoTabela | null {
   const t = normalizarTexto(texto).replace(/[.:]/g, "");
-  if (!t) return null;
+  if (!t || t.length > 30) return null;
+  if (/\d/.test(t)) return null; // cabeçalhos não têm números
   for (const { campo, termos } of SINONIMOS) {
     for (const termo of termos) {
-      if (t === termo || t.startsWith(`${termo} `) || t.includes(termo)) return campo;
+      if (t === termo || t.startsWith(`${termo} `)) return campo;
     }
   }
   return null;
