@@ -490,24 +490,23 @@ export async function lerProgramacaoPdf(
       if (!porAncoras && !porColunas) motivos.push("Linha lida sem cabeçalho de tabela identificado");
 
 
-      // --- Regional: linha a linha ---
+      // --- Regional: exclusivamente pela coluna REGIONAL da própria linha ---
       let origem: RegistroExtraido["regional_origem"] = "linha";
       let regional =
-        detectarRegional(bruto.regional ?? null) ??
-        detectarRegional(texto);
-      if (!regional && regionalDaPagina) {
-        regional = regionalDaPagina;
-        origem = "cabecalho_pagina";
-      }
+        detectarRegionalNaLinha(bruto.regional ?? null) ??
+        detectarRegionalNaLinha(texto) ??
+        detectarRegional(bruto.regional ?? null);
       if (!regional && regionalAnterior) {
+        // nunca herda do cabeçalho/título da página; só da linha anterior, para revisão
         regional = regionalAnterior;
         origem = "linha_anterior";
+        motivos.push("Regional herdada da linha anterior — conferir");
       }
       if (!regional) {
         origem = "nao_identificada";
-        motivos.push("Regional não confirmada");
+        motivos.push("Regional não identificada na coluna REGIONAL");
       }
-      if (regional) regionalAnterior = regional;
+      if (regional && origem === "linha") regionalAnterior = regional;
 
       const kmInicial = parseKm(bruto.km_inicial ?? null);
       const kmFinal = parseKm(bruto.km_final ?? null);
@@ -541,6 +540,37 @@ export async function lerProgramacaoPdf(
         precisaRevisao: motivos.length > 0,
         motivosRevisao: motivos,
       });
+
+      diagnostico.push({
+        pagina: numeroPagina,
+        linha: numeroLinha,
+        texto,
+        regional,
+        status: motivos.length ? "conferencia" : "aceita",
+        motivo: motivos.join(" · ") || "Linha válida",
+      });
+    }
+  }
+
+  // datas fora do período informado no PDF: manter, apenas sinalizar
+  if (periodoDeclarado.inicio && periodoDeclarado.fim) {
+    for (const registro of registros) {
+      if (!registro.data_inicial) continue;
+      if (
+        registro.data_inicial >= periodoDeclarado.inicio &&
+        registro.data_inicial <= periodoDeclarado.fim
+      ) {
+        continue;
+      }
+      registro.motivosRevisao.push("Data fora do período informado — conferir");
+      registro.precisaRevisao = true;
+      const item = diagnostico.find(
+        (d) => d.pagina === registro.pagina_pdf && d.texto === registro.linha_bruta,
+      );
+      if (item) {
+        item.status = "conferencia";
+        item.motivo = registro.motivosRevisao.join(" · ");
+      }
     }
   }
 
@@ -552,6 +582,8 @@ export async function lerProgramacaoPdf(
     totalPaginas: doc.numPages,
     paginasComOcr,
     registros,
+    diagnostico,
+    periodoDeclarado,
     periodo: { inicio: datas[0] ?? null, fim: datas[datas.length - 1] ?? null },
   };
 }
