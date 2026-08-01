@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import {
   ArrowDown,
   ArrowUp,
+  CalendarDays,
   Crosshair,
+  FileDown,
   MapPin,
   Navigation,
   Route as RouteIcon,
@@ -25,8 +27,11 @@ import {
   salvarCoordenadas,
   salvarRota,
 } from "@/lib/programacao.functions";
+import { diasDaProgramacao } from "@/lib/importacoes.functions";
+import { calcularPercurso } from "@/lib/osrm.functions";
 import { enfileirar } from "@/lib/offline/sync";
-import { guardarRotaLocal } from "@/lib/offline/db";
+import { guardarPdf, guardarRotaLocal } from "@/lib/offline/db";
+import { gerarPdfRota, nomeArquivoRota, type ParadaPdf } from "@/lib/rotas/pdf";
 import { validarRota, textoDosProblemas, type ItemRota } from "@/lib/rotas/validacao";
 import { linkGoogleMaps, linkWaze, localizarTrecho } from "@/services/derMapService";
 
@@ -59,6 +64,17 @@ type Servico = {
   regionalConfirmada: boolean;
   lat: number | null;
   lon: number | null;
+  bruto: Record<string, string | number | boolean | null>;
+  aproximado: boolean;
+};
+
+type Percurso = {
+  disponivel: boolean;
+  motivo?: string;
+  pernas: Array<{ distanciaKm: number; tempoMin: number }>;
+  distanciaTotalKm: number;
+  tempoTotalMin: number;
+  geometria: Array<{ lat: number; lon: number }>;
 };
 
 function distanciaKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
@@ -75,7 +91,10 @@ function RotaPagina() {
   const { perfil, carregado, salvar } = usePerfilLocal();
   const cliente = useQueryClient();
 
-  const [visao, setVisao] = useState<"hoje" | "amanha" | "semana">("hoje");
+  const [visao, setVisao] = useState<"hoje" | "amanha" | "semana" | "dia">("hoje");
+  const [dia, setDia] = useState<string>("");
+  const [percurso, setPercurso] = useState<Percurso | null>(null);
+  const [calculando, setCalculando] = useState(false);
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [ordem, setOrdem] = useState<string[]>([]);
@@ -85,9 +104,16 @@ function RotaPagina() {
   const [progresso, setProgresso] = useState(0);
 
   const programacao = useQuery({
-    queryKey: ["programacoes", perfil?.id, "rota", visao],
+    queryKey: ["programacoes", perfil?.id, "rota", visao, dia],
+    enabled: !!perfil?.id && (visao !== "dia" || !!dia),
+    queryFn: () =>
+      listarProgramacoes({ data: { funcionarioId: perfil!.id, visao, ...(dia ? { dia } : {}) } }),
+  });
+
+  const dias = useQuery({
+    queryKey: ["dias-programacao", perfil?.id],
     enabled: !!perfil?.id,
-    queryFn: () => listarProgramacoes({ data: { funcionarioId: perfil!.id, visao } }),
+    queryFn: () => diasDaProgramacao({ data: { funcionarioId: perfil!.id } }),
   });
 
   const rotasSalvas = useQuery({
@@ -156,6 +182,8 @@ function RotaPagina() {
         regionalConfirmada: Boolean(r["regional_confirmada"]),
         lat,
         lon,
+        bruto: r,
+        aproximado: r["localizacao_confirmada"] === false,
       });
       setProgresso(Math.round(((i + 1) / registros.length) * 100));
     }
