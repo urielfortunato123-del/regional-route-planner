@@ -717,7 +717,7 @@ export const salvarRota = createServerFn({ method: "POST" })
       .eq("regional_id", perfil.regional_id)
       .eq("status", "pendente");
 
-    return { ok: true, rotaId, itens: data.itens.length };
+    return { ok: true, rotaId, versaoRota, itens: data.itens.length };
   });
 
 export const listarRotas = createServerFn({ method: "POST" })
