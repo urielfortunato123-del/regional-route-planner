@@ -578,6 +578,8 @@ export const salvarRota = createServerFn({ method: "POST" })
             origem: z.string().optional(),
           })
           .nullable(),
+        origemTipo: z.string().max(40).nullable().optional(),
+        algoritmo: z.string().max(60).nullable().optional(),
         distanciaTotal: z.number().nullable().optional(),
         tempoEstimado: z.number().int().nullable().optional(),
         itens: z
