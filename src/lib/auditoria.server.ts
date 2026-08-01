@@ -26,6 +26,15 @@ export type RegistroAuditoria = {
   km_inicial: number | null;
   km_final: number | null;
   status_validacao: string;
+  status_conferencia: string;
+  data_fora_periodo: boolean;
+  conferido_em: string | null;
+  conferido_por: string | null;
+  periodo_inicio_esperado: string | null;
+  periodo_fim_esperado: string | null;
+  data_final: string | null;
+  equipe: string | null;
+  atividade: string | null;
   status_persistencia: "persistido" | "em_conferencia";
   status_geometria: string;
   latitude_inicial: number | null;
@@ -98,7 +107,7 @@ export async function auditar(funcionarioId: string, importacaoId: string | null
     const { data, error } = await supabaseAdmin
       .from("importacao_registros")
       .select(
-        "id, importacao_id, pagina_pdf, texto_original, regional_codigo, regional_id, data_inicial, rodovia, km_inicial, km_final, status_validacao, duplicado, motivos, programacao_id, atualizado_em",
+        "id, importacao_id, pagina_pdf, texto_original, regional_codigo, regional_id, data_inicial, data_final, equipe, atividade, rodovia, km_inicial, km_final, status_validacao, status_conferencia, data_fora_periodo, motivo_conferencia, periodo_inicio_esperado, periodo_fim_esperado, conferido_em, conferido_por, duplicado, motivos, programacao_id, atualizado_em",
       )
       .eq("importacao_id", importacaoId)
       .limit(3000);
@@ -110,7 +119,7 @@ export async function auditar(funcionarioId: string, importacaoId: string | null
   let consulta = supabaseAdmin
     .from("programacoes")
     .select(
-      "id, importacao_id, pagina_pdf, linha_bruta, regional_id, regional_codigo, regional_confirmada, data_inicial, data_final, rodovia, km_inicial, km_final, status, status_geometria, latitude_inicial, longitude_inicial, latitude_final, longitude_final, atualizado_em",
+      "id, importacao_id, pagina_pdf, linha_bruta, regional_id, regional_codigo, regional_confirmada, data_inicial, data_final, equipe, atividade, rodovia, km_inicial, km_final, status, status_conferencia, data_fora_periodo, motivo_conferencia, periodo_inicio_esperado, periodo_fim_esperado, conferido_em, conferido_por, status_geometria, latitude_inicial, longitude_inicial, latitude_final, longitude_final, atualizado_em",
     )
     .limit(5000);
   if (importacaoId) consulta = consulta.eq("importacao_id", importacaoId);
@@ -161,6 +170,7 @@ export async function auditar(funcionarioId: string, importacaoId: string | null
     if (!localizado(r)) return "Aguardando localização (sem coordenada)";
     if (r["status"] === "cancelado") return "Serviço cancelado";
     if (r["status"] === "concluido") return "Serviço já concluído";
+    if (r["data_fora_periodo"] === true) return "Data fora do período informado no PDF — conferir";
     return null;
   };
 
@@ -176,6 +186,15 @@ export async function auditar(funcionarioId: string, importacaoId: string | null
       km_inicial: (r["km_inicial"] as number | null) ?? null,
       km_final: (r["km_final"] as number | null) ?? null,
       status_validacao: String(r["status"] ?? "pendente"),
+      status_conferencia: String(r["status_conferencia"] ?? "OK"),
+      data_fora_periodo: r["data_fora_periodo"] === true,
+      conferido_em: (r["conferido_em"] as string | null) ?? null,
+      conferido_por: (r["conferido_por"] as string | null) ?? null,
+      periodo_inicio_esperado: (r["periodo_inicio_esperado"] as string | null) ?? null,
+      periodo_fim_esperado: (r["periodo_fim_esperado"] as string | null) ?? null,
+      data_final: (r["data_final"] as string | null) ?? null,
+      equipe: (r["equipe"] as string | null) ?? null,
+      atividade: (r["atividade"] as string | null) ?? null,
       status_persistencia: "persistido" as const,
       status_geometria: String(
         r["status_geometria"] ?? (localizado(r) ? "LOCALIZADA_INTERPOLADA" : "AGUARDANDO_LOCALIZACAO"),
@@ -203,6 +222,15 @@ export async function auditar(funcionarioId: string, importacaoId: string | null
         km_inicial: (r["km_inicial"] as number | null) ?? null,
         km_final: (r["km_final"] as number | null) ?? null,
         status_validacao: String(r["status_validacao"] ?? "revisar"),
+      status_conferencia: String(r["status_conferencia"] ?? "OK"),
+        data_fora_periodo: r["data_fora_periodo"] === true,
+        conferido_em: (r["conferido_em"] as string | null) ?? null,
+        conferido_por: (r["conferido_por"] as string | null) ?? null,
+        periodo_inicio_esperado: (r["periodo_inicio_esperado"] as string | null) ?? null,
+        periodo_fim_esperado: (r["periodo_fim_esperado"] as string | null) ?? null,
+        data_final: (r["data_final"] as string | null) ?? null,
+        equipe: (r["equipe"] as string | null) ?? null,
+        atividade: (r["atividade"] as string | null) ?? null,
         status_persistencia: "em_conferencia" as const,
         status_geometria: "AGUARDANDO_LOCALIZACAO",
         latitude_inicial: null,
@@ -236,6 +264,9 @@ export async function auditar(funcionarioId: string, importacaoId: string | null
       exibidosProgramacao: naProgramacao.length,
       exibidosMapa: daRegional.length,
       concluidos: concluidos.length,
+      datasDivergentes:
+        daRegional.filter((r) => r["data_fora_periodo"] === true).length +
+        staging.filter((r) => !r["programacao_id"] && r["data_fora_periodo"] === true).length,
       cancelados: cancelados.length,
     },
     porRegional: [...porRegional.entries()]
