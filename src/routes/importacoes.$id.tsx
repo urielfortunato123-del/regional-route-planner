@@ -421,6 +421,12 @@ function ConferenciaPagina() {
                     </Etiqueta>
                     {r.duplicado ? <Etiqueta tom="erro">repetida</Etiqueta> : null}
                     {r.foi_corrigido ? <Etiqueta tom="neutro">corrigida</Etiqueta> : null}
+                    {r.data_fora_periodo ? (
+                      <Etiqueta tom="erro">data fora do período</Etiqueta>
+                    ) : null}
+                    {r.conferido_por ? (
+                      <Etiqueta tom="neutro">conferida por {r.conferido_por}</Etiqueta>
+                    ) : null}
                     <Etiqueta tom="neutro">pág. {r.pagina_pdf}</Etiqueta>
                   </div>
 
