@@ -57,6 +57,16 @@ export type RegistroExtraido = {
   motivosRevisao: string[];
 };
 
+/** Diagnóstico linha a linha (Página | Linha | Texto | Regional | Status | Motivo). */
+export type LinhaDiagnostico = {
+  pagina: number;
+  linha: number;
+  texto: string;
+  regional: string | null;
+  status: "aceita" | "conferencia" | "ignorada";
+  motivo: string;
+};
+
 export type ResultadoLeitura = {
   nomeArquivo: string;
   hash: string;
@@ -64,6 +74,8 @@ export type ResultadoLeitura = {
   paginasComOcr: number[];
   registros: RegistroExtraido[];
   periodo: { inicio: string | null; fim: string | null };
+  periodoDeclarado: { inicio: string | null; fim: string | null };
+  diagnostico: LinhaDiagnostico[];
 };
 
 type Palavra = { texto: string; x: number; y: number; largura: number };
