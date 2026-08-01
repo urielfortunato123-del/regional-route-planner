@@ -182,19 +182,112 @@ function distribuirEmColunas(linha: Palavra[], colunas: Coluna[]): Partial<Recor
   return saida;
 }
 
-const RE_RODOVIA = /\b(SPA|SPM|SPI|SP|BR|VIC|VCS)\s*[-.]?\s*\d{2,3}/i;
+const RE_RODOVIA =
+  /\b(SPA|SPM|SPI|SP|BR|VIC|VCS)\s*[-.]?\s*\d{2,3}(?:\s*\/\s*\d{2,3})?(?:\s+[A-Z]\b)?/i;
+const RE_RODOVIA_G = new RegExp(RE_RODOVIA.source, "gi");
+const RE_REGIONAL_ROTULO = /\bCGR\.?\s*\d{1,2}\s*[-–]\s*[A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]{2,})?/i;
+const RE_CONTRATO = /\d{2}\.\d{3}-\d[^]*?(?:\)|(?=\s[A-ZÀ-Ÿ][a-zà-ÿ]))/;
+const RE_KM = /\b\d{1,4}[.,]\d{1,3}\b/g;
+const RE_DATA = /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g;
+
+const RE_IGNORAR =
+  /^(versao|diretoria de operacoes|planejamento (semanal|diario|quinzenal|mensal)|gerenciamento me|pagina|page)/;
 
 function linhaEhDado(texto: string): boolean {
   const t = normalizarTexto(texto);
   if (t.length < 6) return false;
-  if (/^(pagina|page)\b/.test(t)) return false;
+  if (RE_IGNORAR.test(t)) return false;
   if (/total de registros|assinatura|emitido em/.test(t)) return false;
   return RE_RODOVIA.test(texto) || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(texto) || /\bkm\b/i.test(texto);
 }
 
-/** Extração de reserva quando o cabeçalho não pôde ser identificado. */
+/**
+ * Extração por âncoras: usa a ordem natural da linha da programação
+ * (equipe → regional → categoria → contrato → atividade → rodovia → km →
+ * descrição → datas → medição → observação). Mais confiável que a geometria
+ * das colunas quando células têm larguras variáveis ou texto em várias linhas.
+ */
+function extrairPorAncoras(texto: string): Partial<Record<CampoTabela, string>> | null {
+  const linha = texto.replace(/\s+/g, " ").trim();
+
+  const mRegional = linha.match(RE_REGIONAL_ROTULO);
+  const mRodovia = linha.match(RE_RODOVIA);
+  if (!mRodovia || mRodovia.index === undefined) return null;
+
+  const saida: Partial<Record<CampoTabela, string>> = {};
+  const inicioRodovia = mRodovia.index;
+
+  if (mRegional && mRegional.index !== undefined && mRegional.index < inicioRodovia) {
+    saida.regional = mRegional[0];
+    const equipe = linha.slice(0, mRegional.index).trim();
+    if (equipe) saida.equipe = equipe;
+
+    const meio = linha.slice(mRegional.index + mRegional[0].length, inicioRodovia).trim();
+    const mContrato = meio.match(RE_CONTRATO);
+    if (mContrato && mContrato.index !== undefined) {
+      const categoria = meio.slice(0, mContrato.index).trim();
+      if (categoria) saida.categoria = categoria;
+      saida.contrato = mContrato[0].trim();
+      const atividade = meio.slice(mContrato.index + mContrato[0].length).trim();
+      if (atividade) saida.atividade = atividade;
+    } else if (meio) {
+      saida.categoria = meio;
+    }
+  } else {
+    const antes = linha.slice(0, inicioRodovia).trim();
+    if (antes) saida.categoria = antes;
+  }
+
+  saida.rodovia = mRodovia[0];
+
+  const resto = linha.slice(inicioRodovia + mRodovia[0].length);
+
+  RE_KM.lastIndex = 0;
+  const kms = [...resto.matchAll(RE_KM)];
+  RE_DATA.lastIndex = 0;
+  const datas = [...resto.matchAll(RE_DATA)];
+
+  // números de km não podem estar depois da primeira data
+  const limiteData = datas[0]?.index ?? resto.length;
+  const kmsValidos = kms.filter((m) => (m.index ?? 0) < limiteData);
+  if (kmsValidos[0]) saida.km_inicial = kmsValidos[0][0];
+  if (kmsValidos[1]) saida.km_final = kmsValidos[1][0];
+
+  const fimKm = kmsValidos.length
+    ? (kmsValidos[kmsValidos.length - 1]!.index ?? 0) +
+      kmsValidos[kmsValidos.length - 1]![0].length
+    : 0;
+
+  if (datas[0]) {
+    saida.data_inicial = datas[0][0];
+    const descricao = resto.slice(fimKm, datas[0].index).trim();
+    if (descricao) saida.descricao = descricao;
+  } else {
+    const descricao = resto.slice(fimKm).trim();
+    if (descricao) saida.descricao = descricao;
+  }
+  if (datas[1]) saida.data_final = datas[1][0];
+
+  const ultimaData = datas[datas.length - 1];
+  if (ultimaData) {
+    const cauda = resto.slice((ultimaData.index ?? 0) + ultimaData[0].length).trim();
+    const mMedicao = cauda.match(/^([\d.,]+)\s*(.*)$/s);
+    if (mMedicao) {
+      saida.medicao = mMedicao[1];
+      const obs = (mMedicao[2] ?? "").trim();
+      if (obs) saida.observacao = obs;
+    } else if (cauda) {
+      saida.observacao = cauda;
+    }
+  }
+
+  return saida;
+}
+
+/** Extração de reserva quando não há âncoras suficientes. */
 function extrairPorRegex(texto: string): Partial<Record<CampoTabela, string>> {
   const saida: Partial<Record<CampoTabela, string>> = {};
+  RE_RODOVIA_G.lastIndex = 0;
   const rodovia = texto.match(RE_RODOVIA);
   if (rodovia) saida.rodovia = rodovia[0];
 
@@ -209,6 +302,7 @@ function extrairPorRegex(texto: string): Partial<Record<CampoTabela, string>> {
   saida.descricao = texto;
   return saida;
 }
+
 
 function limpar(valor: string | undefined | null): string | null {
   if (!valor) return null;
