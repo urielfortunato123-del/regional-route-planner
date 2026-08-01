@@ -12,6 +12,7 @@ import {
   salvarCoordenadas,
   salvarRota,
 } from "@/lib/programacao.functions";
+import { criarInspecao, criarOcorrencia } from "@/lib/campo.functions";
 
 const EVENTO = "fila-sincronizacao-alterada";
 
@@ -56,6 +57,12 @@ async function executar(pendencia: PendenciaLocal) {
       return;
     case "rota":
       await salvarRota({ data: payload });
+      return;
+    case "inspecao":
+      await criarInspecao({ data: payload });
+      return;
+    case "ocorrencia":
+      await criarOcorrencia({ data: payload });
       return;
   }
 }
