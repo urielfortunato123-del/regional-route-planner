@@ -318,9 +318,20 @@ export default function MapaLeaflet({
   }, [posicaoUsuario]);
 
   useEffect(() => {
-    if (!mapa.current || !foco) return;
-    mapa.current.flyTo([foco.lat, foco.lon], foco.zoom ?? 14, { duration: 0.8 });
+    if (!foco) return;
+    const aplicar = () => {
+      if (!mapa.current) return false;
+      mapa.current.flyTo([foco.lat, foco.lon], foco.zoom ?? 14, { duration: 0.8 });
+      return true;
+    };
+    // o mapa pode ainda não estar montado quando o foco chega (carga assíncrona)
+    if (aplicar()) return;
+    const t = setInterval(() => {
+      if (aplicar()) clearInterval(t);
+    }, 150);
+    return () => clearInterval(t);
   }, [foco?.chave]);
+
 
   return <div ref={div} style={{ height: altura }} className="w-full rounded-xl" />;
 }

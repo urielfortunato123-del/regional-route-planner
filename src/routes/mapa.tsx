@@ -40,6 +40,10 @@ import {
   type TrechoProgramado,
 } from "@/lib/rotas/inteligente";
 import { distanciaMetros } from "@/lib/der/geo";
+import { derLimiteRegional } from "@/lib/der.functions";
+import { listarRegionais } from "@/lib/programacao.functions";
+
+
 import {
   carregarCamadasDer,
   estimarKm,
@@ -225,6 +229,52 @@ function MapaPagina() {
         marcos: marcosVisiveis,
       }),
   });
+
+  // O limite oficial da regional é pesado no serviço do DER (~15 s): carrega em
+  // paralelo, sem atrasar o desenho da malha rodoviária e dos marcos.
+  const numeroRegional = numeroRegionalDer(perfil?.regional_codigo ?? null);
+  const limiteRegionalDer = useQuery({
+    queryKey: ["der-limite", numeroRegional],
+    enabled: numeroRegional != null,
+    staleTime: 24 * 60 * 60_000,
+    gcTime: 24 * 60 * 60_000,
+    retry: 1,
+    queryFn: () => derLimiteRegional({ data: { regional: numeroRegional! } }),
+  });
+  const limiteDer = camadas.data?.limite ?? limiteRegionalDer.data?.limite ?? null;
+
+  // Sede da regional (banco): usada para enquadrar o mapa assim que a tela abre.
+  const regionais = useQuery({
+    queryKey: ["regionais"],
+    staleTime: 24 * 60 * 60_000,
+    queryFn: () => listarRegionais(),
+  });
+  const sedeRegional = useMemo(() => {
+    const r = (regionais.data ?? []).find((x) => x.codigo === perfil?.regional_codigo);
+    return r?.sede_latitude != null && r?.sede_longitude != null
+      ? { lat: r.sede_latitude, lon: r.sede_longitude }
+      : null;
+  }, [regionais.data, perfil?.regional_codigo]);
+
+  // Ao abrir, enquadra automaticamente a regional do funcionário: sem isso o
+  // mapa fica no zoom do estado inteiro e as camadas do DER nem são pedidas.
+  const enquadrado = useRef(false);
+  useEffect(() => {
+    if (enquadrado.current) return;
+    const centro = limiteDer
+      ? {
+          lat: (limiteDer.bbox.sul + limiteDer.bbox.norte) / 2,
+          lon: (limiteDer.bbox.oeste + limiteDer.bbox.leste) / 2,
+        }
+      : sedeRegional;
+    if (!centro) return;
+    enquadrado.current = true;
+    setFoco({ ...centro, zoom: 10, chave: `regional-${perfil?.regional_codigo}` });
+  }, [limiteDer, sedeRegional, perfil?.regional_codigo]);
+
+
+
+
 
   const status = useQuery({
     queryKey: ["der-status"],
@@ -622,8 +672,13 @@ function MapaPagina() {
     return saida;
   }, [servicosVisiveis, resultadoBusca, rota, verTrechos, verRota]);
 
+  const zoomInsuficiente = Boolean(areaConsulta) && zoom < 9;
   const camadasIndisponiveis =
-    Boolean(areaConsulta) && !camadas.isLoading && (camadas.isError || camadas.data == null);
+    Boolean(areaConsulta) &&
+    zoom >= 9 &&
+    !camadas.isLoading &&
+    (camadas.isError || camadas.data == null);
+
 
   const cache = resumoCacheDer();
 
@@ -830,7 +885,7 @@ function MapaPagina() {
               aoSelecionar={alternarSelecao}
               derRodovias={camadas.data?.rodovias ?? []}
               derMarcos={camadas.data?.marcos ?? []}
-              derLimite={camadas.data?.limite?.aneis ?? []}
+              derLimite={limiteDer?.aneis ?? []}
               mostrarDerRodovias={verMalha}
               mostrarDerMarcos={marcosVisiveis}
               mostrarDerLimite={verLimite}
@@ -868,11 +923,18 @@ function MapaPagina() {
             <p>
               Rodovias, marcos e limites carregados somente da regional{" "}
               {perfil.regional_rotulo}
-              {camadas.data?.limite?.nome ? ` (DER: ${camadas.data.limite.nome})` : ""}.
+              {limiteDer?.nome ? ` (DER: ${limiteDer.nome})` : ""}.
             </p>
           </div>
         </Cartao>
 
+        {zoomInsuficiente ? (
+          <Cartao className="border-warning/60 bg-warning/10 text-sm">
+            <p className="font-semibold">
+              Aproxime o mapa para carregar a malha oficial do DER-SP.
+            </p>
+          </Cartao>
+        ) : null}
         {camadasIndisponiveis ? (
           <Cartao className="border-destructive/60 bg-destructive/10 text-sm">
             <p className="font-semibold">
@@ -880,6 +942,7 @@ function MapaPagina() {
             </p>
           </Cartao>
         ) : null}
+
         {camadas.data?.fonte === "cache" ? (
           <Cartao className="border-warning/60 bg-warning/10 text-sm">
             <p className="font-semibold">Camadas DER indisponíveis. Exibindo última base salva.</p>
@@ -908,7 +971,7 @@ function MapaPagina() {
               </div>
               <div>
                 <dt className="font-semibold text-foreground">Regional</dt>
-                <dd>{camadas.data?.limite?.nome ?? perfil.regional_rotulo}</dd>
+                <dd>{limiteDer?.nome ?? perfil.regional_rotulo}</dd>
               </div>
               <div>
                 <dt className="font-semibold text-foreground">Km aproximado</dt>
@@ -994,7 +1057,7 @@ function MapaPagina() {
               <Etiqueta tom="ok">marco oficial DER-SP</Etiqueta>
             </div>
             <p className="text-muted-foreground">
-              Regional: {camadas.data?.limite?.nome ?? perfil.regional_rotulo} • Coordenadas:{" "}
+              Regional: {limiteDer?.nome ?? perfil.regional_rotulo} • Coordenadas:{" "}
               {textoCoordenadas(marcoDer)}
             </p>
             <p className="text-muted-foreground">
