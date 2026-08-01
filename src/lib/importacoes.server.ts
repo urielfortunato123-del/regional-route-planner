@@ -29,7 +29,7 @@ export const ROTULO_STATUS: Record<StatusImportacao, string> = {
 };
 
 export const COLUNAS_REGISTRO_IMPORTACAO =
-  "id, importacao_id, regional_id, regional_codigo, regional_confirmada, regional_origem, pagina_pdf, texto_original, valores_extraidos, equipe, funcionario, categoria, contrato, atividade, rodovia, km_inicial, km_final, descricao, data_inicial, data_final, medicao, observacao, chave_duplicidade, duplicado, status_validacao, motivos, campos_corrigidos, foi_corrigido, programacao_id";
+  "id, importacao_id, regional_id, regional_codigo, regional_confirmada, regional_origem, pagina_pdf, texto_original, valores_extraidos, equipe, funcionario, categoria, contrato, atividade, rodovia, km_inicial, km_final, descricao, data_inicial, data_final, medicao, observacao, chave_duplicidade, duplicado, status_validacao, motivos, campos_corrigidos, foi_corrigido, programacao_id, status_conferencia, motivo_conferencia, data_fora_periodo, periodo_inicio_esperado, periodo_fim_esperado, conferido_em, conferido_por";
 
 export type CamposRegistro = {
   regional_codigo?: string | null | undefined;
