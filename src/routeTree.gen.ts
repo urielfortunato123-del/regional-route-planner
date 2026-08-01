@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as ProgramacaoIndexRouteImport } from './routes/programacao.index'
 import { Route as ProgramacaoImportarRouteImport } from './routes/programacao.importar'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProgramacaoIndexRoute = ProgramacaoIndexRouteImport.update({
@@ -31,30 +37,39 @@ const ProgramacaoImportarRoute = ProgramacaoImportarRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/configuracoes': typeof ConfiguracoesRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao/': typeof ProgramacaoIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/configuracoes': typeof ConfiguracoesRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao': typeof ProgramacaoIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/configuracoes': typeof ConfiguracoesRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao/': typeof ProgramacaoIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/programacao/importar' | '/programacao/'
+  fullPaths: '/' | '/configuracoes' | '/programacao/importar' | '/programacao/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/programacao/importar' | '/programacao'
-  id: '__root__' | '/' | '/programacao/importar' | '/programacao/'
+  to: '/' | '/configuracoes' | '/programacao/importar' | '/programacao'
+  id:
+    | '__root__'
+    | '/'
+    | '/configuracoes'
+    | '/programacao/importar'
+    | '/programacao/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ConfiguracoesRoute: typeof ConfiguracoesRoute
   ProgramacaoImportarRoute: typeof ProgramacaoImportarRoute
   ProgramacaoIndexRoute: typeof ProgramacaoIndexRoute
 }
@@ -66,6 +81,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/configuracoes': {
+      id: '/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof ConfiguracoesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/programacao/': {
@@ -87,6 +109,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ConfiguracoesRoute: ConfiguracoesRoute,
   ProgramacaoImportarRoute: ProgramacaoImportarRoute,
   ProgramacaoIndexRoute: ProgramacaoIndexRoute,
 }

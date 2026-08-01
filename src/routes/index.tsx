@@ -76,7 +76,7 @@ function Inicio() {
               <CalendarRange className="size-5" /> Ver programação
             </Botao>
           </Link>
-          <Link to="/programacao" search={{ visao: "pendentes" } as never}>
+          <Link to="/programacao" >
             <Botao className="w-full justify-start" variante="contorno">
               <ClipboardList className="size-5" /> Serviços pendentes
             </Botao>

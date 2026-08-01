@@ -28,7 +28,7 @@ export const Route = createFileRoute("/configuracoes")({
 });
 
 function Configuracoes() {
-  const { perfil, carregado, salvar, limpar } = usePerfilLocal();
+  const { perfil, carregado, salvar } = usePerfilLocal();
   const [nome, setNome] = useState("");
   const [matricula, setMatricula] = useState("");
   const [equipe, setEquipe] = useState("");
@@ -107,7 +107,7 @@ function Configuracoes() {
             variante="perigo"
             className="w-full"
             onClick={() => {
-              limpar();
+              salvar(null);
               toast.success("Identificação removida deste dispositivo.");
             }}
           >
