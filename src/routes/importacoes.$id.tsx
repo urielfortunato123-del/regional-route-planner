@@ -135,17 +135,19 @@ function ConferenciaPagina() {
   const confirmar = useMutation({
     mutationFn: () =>
       confirmarImportacao({
-        data: { funcionarioId: perfil!.id, importacaoId: id, somenteValidos: true },
+        data: { funcionarioId: perfil!.id, importacaoId: id, somenteValidos: false },
       }),
     onSuccess: (r) => {
       toast.success(
-        `${r.inseridos} serviço(s) liberados para a programação${r.pendentes ? `; ${r.pendentes} ainda em conferência` : ""}.`,
+        `${r.inseridos} serviço(s) salvos na programação${r.incompletos ? ` (${r.incompletos} ainda precisam de ajuste)` : ""}${r.pendentes ? `; ${r.pendentes} sem regional continuam em conferência` : ""}.`,
       );
       recarregar();
-      if (!r.pendentes) void navegar({ to: "/rota" });
+      void fila.invalidateQueries();
+      if (r.inseridos > 0) void navegar({ to: "/programacao" });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const novaVersao = useMutation({
     mutationFn: () => duplicarImportacao({ data: { funcionarioId: perfil!.id, importacaoId: id } }),
