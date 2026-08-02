@@ -50,7 +50,7 @@ export function SimulacaoDer({
   });
 
   const ultimo = simular.data;
-  const lista = historico.data?.simulacoes ?? [];
+  const lista = historico.data ?? [];
 
   return (
     <Cartao>
