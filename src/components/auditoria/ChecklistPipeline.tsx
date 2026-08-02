@@ -51,7 +51,7 @@ export function ChecklistPipeline({
 
   const validar = useMutation({
     mutationFn: () =>
-      executarChecklistPipeline({ funcionarioId, importacaoId, regionalCodigo, dia }),
+      executarChecklistPipeline({ funcionarioId, importacaoId, regionalCodigo, dia: dia ?? null }),
     onSuccess: (r) => {
       aoMudarChecklist?.(r.checklist);
       consulta.refetch();
@@ -67,7 +67,7 @@ export function ChecklistPipeline({
 
   const corrigir = useMutation({
     mutationFn: () =>
-      atualizarEtapasDivergentes({ funcionarioId, importacaoId, regionalCodigo, dia }),
+      atualizarEtapasDivergentes({ funcionarioId, importacaoId, regionalCodigo, dia: dia ?? null }),
     onSuccess: (r) => {
       aoMudarChecklist?.(r.checklist);
       consulta.refetch();
