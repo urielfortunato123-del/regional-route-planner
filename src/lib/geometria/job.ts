@@ -38,13 +38,50 @@ const PROGRESSO_INICIAL: ProgressoJob = {
   emAndamento: false,
 };
 
+/** Evento consultável durante a sessão (não é só toast). */
+export type EventoGeometria = {
+  id: string;
+  servicoId: string;
+  rotulo: string;
+  statusAnterior: StatusGeometria | string;
+  statusNovo: StatusGeometria;
+  fonte: string;
+  mensagem: string;
+  em: string;
+  ok: boolean;
+  simulacao: boolean;
+};
+
 let emExecucao = false;
 const travados = new Set<string>();
 let progressoAtual: ProgressoJob = { ...PROGRESSO_INICIAL };
 const ouvintes = new Set<(p: ProgressoJob) => void>();
+const eventos: EventoGeometria[] = [];
+const ouvintesEventos = new Set<(e: EventoGeometria[]) => void>();
 
 export function progressoGeometria() {
   return progressoAtual;
+}
+
+export function eventosGeometria() {
+  return eventos;
+}
+
+export function limparEventosGeometria() {
+  eventos.length = 0;
+  for (const fn of ouvintesEventos) fn([...eventos]);
+}
+
+export function observarEventosGeometria(fn: (e: EventoGeometria[]) => void) {
+  ouvintesEventos.add(fn);
+  fn([...eventos]);
+  return () => ouvintesEventos.delete(fn);
+}
+
+function publicarEvento(evento: EventoGeometria) {
+  eventos.unshift(evento);
+  if (eventos.length > 200) eventos.length = 200;
+  for (const fn of ouvintesEventos) fn([...eventos]);
 }
 
 export function observarGeometria(fn: (p: ProgressoJob) => void) {
@@ -63,6 +100,19 @@ function classificarFalha(motivo: string): StatusGeometria {
   if (/rodovia/i.test(motivo)) return "ERRO_RODOVIA_NAO_ENCONTRADA";
   return "ERRO_SERVICO_DER";
 }
+
+const rotuloServico = (item: {
+  rodovia: string | null;
+  km_inicial: number | null;
+  km_final: number | null;
+}) => {
+  const km = [item.km_inicial, item.km_final]
+    .filter((v): v is number => v != null)
+    .map((v) => v.toFixed(3).replace(".", ","))
+    .join("–");
+  return `${item.rodovia ?? "Rodovia?"}${km ? ` km ${km}` : ""}`;
+};
+
 
 /**
  * Localiza os serviços pendentes da regional do funcionário.
