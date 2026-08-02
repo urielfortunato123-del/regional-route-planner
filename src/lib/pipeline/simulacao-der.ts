@@ -40,9 +40,26 @@ export async function simularQuedaDoDer(opcoes: {
   const iniciadoEm = new Date().toISOString();
   const importacaoId = opcoes.importacaoId ?? null;
 
-  const antes = await fotografarServicosImportacao({
-    data: { funcionarioId: opcoes.funcionarioId, importacaoId },
-  });
+  const foto = async () => {
+    const { servicos } = await fotografarServicosImportacao({
+      data: { funcionarioId: opcoes.funcionarioId, importacaoId },
+    });
+    const ids = servicos.map((s) => s.id);
+    const vistos = new Set<string>();
+    const duplicados: string[] = [];
+    for (const id of ids) {
+      if (vistos.has(id)) duplicados.push(id);
+      vistos.add(id);
+    }
+    return {
+      ids,
+      duplicados,
+      localizados: servicos.filter((s) => s.latitude_inicial != null).length,
+      aguardando: servicos.filter((s) => s.latitude_inicial == null).length,
+    };
+  };
+
+  const antes = await foto();
 
   simularFalhaDer(tipoFalha);
   let job;
@@ -57,9 +74,7 @@ export async function simularQuedaDoDer(opcoes: {
     simularFalhaDer(null);
   }
 
-  const depois = await fotografarServicosImportacao({
-    data: { funcionarioId: opcoes.funcionarioId, importacaoId },
-  });
+  const depois = await foto();
 
   const idsDepois = new Set(depois.ids);
   const removidos = antes.ids.filter((id) => !idsDepois.has(id));
@@ -118,7 +133,7 @@ export async function simularQuedaDoDer(opcoes: {
       resultado: final.resultado,
       observacoes: final.observacoes.slice(0, 1000),
       detalhes: { removidos: removidos.slice(0, 100), duplicados: duplicados.slice(0, 100) },
-      programacaoVersao: antes.programacaoVersao ?? 1,
+      programacaoVersao: 1,
     },
   });
 
