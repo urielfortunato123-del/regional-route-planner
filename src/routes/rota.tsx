@@ -37,6 +37,9 @@ import { gerarPdfRota, nomeArquivoRota, type ParadaPdf } from "@/lib/rotas/pdf";
 import { validarRota, textoDosProblemas, type ItemRota } from "@/lib/rotas/validacao";
 import { FormularioCampo, type ContextoCampo } from "@/components/campo/FormularioCampo";
 import { linkGoogleMaps, linkWaze, localizarTrecho } from "@/services/derMapService";
+import { PainelGeometria } from "@/components/geometria/PainelGeometria";
+import { checklistPersistido } from "@/lib/pipeline/checklist";
+import { Link } from "@tanstack/react-router";
 
 const MapaLeaflet = lazy(() => import("@/components/mapa/MapaLeaflet"));
 
@@ -610,6 +613,12 @@ function RotaPagina() {
       ]
     : [];
 
+  const bloqueio = useQuery({
+    queryKey: ["bloqueio-pipeline", perfil?.id],
+    enabled: Boolean(perfil?.id),
+    queryFn: () => checklistPersistido({ funcionarioId: perfil!.id, importacaoId: null }),
+  });
+
   const posicionados = servicos.filter((s) => s.lat != null).length;
   const semPosicao = servicos.length - posicionados;
   const etapas = [
@@ -620,9 +629,45 @@ function RotaPagina() {
     { rotulo: "Rota pronta", ok: !!partida && ordem.length > 0 },
   ];
 
+  const criticas = bloqueio.data?.criticasDivergentes ?? [];
+  const pendenciasLeves = bloqueio.data?.pendenciasNaoCriticas ?? [];
+  const rotaBloqueada = criticas.length > 0;
+
   return (
     <AppShell perfil={perfil} titulo="Rota do dia">
       <div className="space-y-4">
+        {rotaBloqueada ? (
+          <Cartao className="space-y-2 border-destructive/50 bg-destructive/10">
+            <p className="flex items-center gap-2 text-sm font-bold text-destructive">
+              <ShieldAlert className="size-4" /> Rota bloqueada: o pipeline está divergente
+            </p>
+            <ul className="space-y-1 text-xs">
+              {criticas.map((e) => (
+                <li key={e.etapa}>
+                  <strong>{e.rotulo}</strong> — {e.status}: esperado {e.esperado} × encontrado{" "}
+                  {e.encontrado}. {e.motivo ?? ""}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs">
+              Corrija as etapas na auditoria da importação e valide o pipeline novamente antes de
+              gerar ou recalcular a rota.
+            </p>
+            <Link to="/importacoes" className="text-sm font-semibold text-primary">
+              Abrir auditoria das importações
+            </Link>
+          </Cartao>
+        ) : pendenciasLeves.length ? (
+          <Cartao className="space-y-1 border-warning/60 bg-warning/10">
+            <p className="text-sm font-semibold">Rota parcial permitida</p>
+            <p className="text-xs">
+              {pendenciasLeves.map((e) => e.motivo ?? e.rotulo).join(" · ")} Os serviços já
+              localizados podem ser roteirizados normalmente.
+            </p>
+          </Cartao>
+        ) : null}
+
+        <PainelGeometria compacto />
         <Cartao className="space-y-3">
           <select
             className={estiloEntrada}
@@ -780,7 +825,7 @@ function RotaPagina() {
           <>
             <Cartao className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Botao onClick={sugerirOrdem} variante="destaque">
+                <Botao onClick={sugerirOrdem} variante="destaque" disabled={rotaBloqueada}>
                   <Wand2 className="size-4" /> Gerar rota sugerida
                 </Botao>
                 <Etiqueta tom={tipo === "sugerida" ? "destaque" : "neutro"}>
@@ -799,7 +844,7 @@ function RotaPagina() {
               <div className="flex flex-wrap gap-2">
                 <Botao
                   variante="contorno"
-                  disabled={calculando}
+                  disabled={calculando || rotaBloqueada}
                   onClick={() => void calcularNaMalha(ordem.filter((id) => selecionados.includes(id)), false)}
                 >
                   {calculando ? "Calculando..." : "Recalcular pela estrada"}
@@ -828,8 +873,12 @@ function RotaPagina() {
 
               <Botao
                 className="w-full"
-                disabled={problemas.length > 0 || gravarRota.isPending}
+                disabled={problemas.length > 0 || rotaBloqueada || gravarRota.isPending}
                 onClick={() => {
+                  if (rotaBloqueada) {
+                    toast.error("Pipeline divergente: corrija a auditoria antes de salvar a rota.");
+                    return;
+                  }
                   if (problemas.length) {
                     toast.error(textoDosProblemas(problemas));
                     return;
