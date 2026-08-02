@@ -128,15 +128,16 @@ export async function gravarChecklist(
       atualizado_em: agora,
     };
 
-    const existente = (
-      await supabaseAdmin
-        .from("pipeline_validacoes")
-        .select("id")
-        .eq("regional_id", perfil.regional_id)
-        .eq("etapa", etapa.etapa)
-        .eq("importacao_id", importacaoId ?? "")
-        .maybeSingle()
-    ).data;
+    let busca = supabaseAdmin
+      .from("pipeline_validacoes")
+      .select("id")
+      .eq("regional_id", perfil.regional_id)
+      .eq("etapa", etapa.etapa);
+    busca = importacaoId
+      ? busca.eq("importacao_id", importacaoId)
+      : busca.is("importacao_id", null);
+    const existente = (await busca.maybeSingle()).data;
+
 
     if (existente) {
       const { error } = await supabaseAdmin
