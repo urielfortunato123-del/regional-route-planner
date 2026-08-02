@@ -96,7 +96,7 @@ export const salvarSimulacaoDer = createServerFn({ method: "POST" })
         duplicados: z.number().int(),
         resultado: z.enum(["aprovado", "aprovado_com_avisos", "reprovado"]),
         observacoes: z.string().max(1000),
-        detalhes: z.unknown(),
+        detalhes: z.unknown().optional(),
         programacaoVersao: z.number().int().min(1).default(1),
       })
       .parse(d),
@@ -106,6 +106,7 @@ export const salvarSimulacaoDer = createServerFn({ method: "POST" })
     const { funcionarioId, importacaoId, ...resto } = data;
     return registrarSimulacao(funcionarioId, {
       ...resto,
+      detalhes: resto.detalhes ?? {},
       importacaoId: importacaoId ?? null,
     });
   });
