@@ -69,6 +69,8 @@ const MapaLeaflet = lazy(() =>
   importarComRetry(() => import("@/components/mapa/MapaLeaflet")),
 );
 
+import { PainelGeometria } from "@/components/geometria/PainelGeometria";
+
 export const Route = createFileRoute("/mapa")({
   head: () => ({
     meta: [
@@ -691,6 +693,7 @@ function MapaPagina() {
   return (
     <AppShell perfil={perfil} titulo="Mapa rodoviário">
       <div className="space-y-4">
+        <PainelGeometria />
         {contingencia || status.data?.disponivel === false ? (
           <Cartao className="border-warning/60 bg-warning/10">
             <div className="flex gap-3">
