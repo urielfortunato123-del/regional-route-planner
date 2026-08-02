@@ -100,6 +100,94 @@ export function exportarDiagnosticoCsv(nomeArquivo: string, linhas: LinhaExporta
   );
 }
 
+export type LinhaChecklist = {
+  ordem: number;
+  rotulo: string;
+  critica: boolean;
+  status: string;
+  esperado: number;
+  encontrado: number;
+  divergencia: number;
+  motivo: string | null;
+  validadoEm: string | null;
+  registros: string[];
+};
+
+/** CSV do checklist de etapas do pipeline (divergências incluídas). */
+export function exportarChecklistCsv(nomeArquivo: string, etapas: LinhaChecklist[]) {
+  const escapa = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const cab = [
+    "Ordem",
+    "Etapa",
+    "Critica",
+    "Status",
+    "Esperado",
+    "Encontrado",
+    "Divergencia",
+    "Motivo",
+    "Validado em",
+    "Registros",
+  ];
+  const corpo = [
+    cab,
+    ...etapas.map((e) => [
+      e.ordem,
+      e.rotulo,
+      e.critica ? "SIM" : "NÃO",
+      e.status,
+      e.esperado,
+      e.encontrado,
+      e.divergencia,
+      e.motivo ?? "",
+      e.validadoEm ?? "",
+      e.registros.join(" "),
+    ]),
+  ]
+    .map((linha) => linha.map(escapa).join(";"))
+    .join("\r\n");
+  baixar(
+    new Blob([`\uFEFF${corpo}`], { type: "text/csv;charset=utf-8;" }),
+    `checklist-${nomeArquivo.replace(/\.pdf$/i, "")}.csv`,
+  );
+}
+
+/** PDF A4 deitado do checklist do pipeline. */
+export async function exportarChecklistPdf(opcoes: {
+  nomeArquivo: string;
+  regional: string;
+  funcionario: string;
+  etapas: LinhaChecklist[];
+}) {
+  const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  doc.setFontSize(14);
+  doc.text("Checklist do pipeline", 14, 14);
+  doc.setFontSize(9);
+  doc.text(
+    `${opcoes.nomeArquivo} · ${opcoes.regional} · ${opcoes.funcionario} · ${new Date().toLocaleString("pt-BR")}`,
+    14,
+    20,
+  );
+  autoTable(doc, {
+    startY: 24,
+    head: [["#", "Etapa", "Crítica", "Status", "Esperado", "Encontrado", "Dif.", "Motivo"]],
+    body: opcoes.etapas.map((e) => [
+      e.ordem,
+      e.rotulo,
+      e.critica ? "SIM" : "NÃO",
+      e.status,
+      e.esperado,
+      e.encontrado,
+      e.divergencia,
+      e.motivo ?? "—",
+    ]),
+    styles: { fontSize: 7, cellPadding: 1 },
+    headStyles: { fillColor: [30, 41, 59] },
+  });
+  doc.save(`checklist-${opcoes.nomeArquivo.replace(/\.pdf$/i, "")}.pdf`);
+}
+
 /** PDF A4 deitado com o diagnóstico completo e o resumo da validação. */
 export async function exportarDiagnosticoPdf(opcoes: {
   nomeArquivo: string;
