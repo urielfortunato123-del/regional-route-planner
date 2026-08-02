@@ -293,6 +293,8 @@ function AuditoriaPagina() {
           funcionarioId={perfil.id}
           importacaoId={id}
           regionalCodigo={perfil.regional_codigo}
+          nomeArquivo={importacao?.nome_arquivo ?? "importacao"}
+          funcionario={perfil.nome}
           aoAtualizar={() => auditoria.refetch()}
         />
 

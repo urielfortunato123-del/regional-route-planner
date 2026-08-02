@@ -3,7 +3,16 @@
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldCheck, Wrench } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileDown,
+  FileSpreadsheet,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  Wrench,
+} from "lucide-react";
 
 import { Botao, Cartao, Etiqueta } from "@/components/AppShell";
 import {
@@ -12,6 +21,7 @@ import {
   executarChecklistPipeline,
 } from "@/lib/pipeline/checklist";
 import type { EtapaChecklist, StatusEtapa } from "@/lib/pipeline/etapas";
+import { exportarChecklistCsv, exportarChecklistPdf } from "@/lib/auditoria/exportar";
 
 const TOM: Record<StatusEtapa, "ok" | "alerta" | "erro" | "neutro"> = {
   PENDENTE: "neutro",
@@ -29,6 +39,8 @@ export function ChecklistPipeline({
   funcionarioId,
   importacaoId,
   regionalCodigo,
+  nomeArquivo = "importacao",
+  funcionario = "",
   dia,
   aoAtualizar,
   aoMudarChecklist,
@@ -36,6 +48,8 @@ export function ChecklistPipeline({
   funcionarioId: string;
   importacaoId: string | null;
   regionalCodigo: string;
+  nomeArquivo?: string;
+  funcionario?: string;
   dia?: string | null;
   aoAtualizar?: () => void;
   aoMudarChecklist?: (etapas: EtapaChecklist[]) => void;
@@ -110,6 +124,29 @@ export function ChecklistPipeline({
           <Botao variante="contorno" onClick={() => consulta.refetch()} disabled={ocupado}>
             <RefreshCw className="size-4" />
             Recarregar
+          </Botao>
+          <Botao
+            variante="contorno"
+            disabled={!checklist.length}
+            onClick={() => exportarChecklistCsv(nomeArquivo, checklist)}
+          >
+            <FileSpreadsheet className="size-4" />
+            Planilha
+          </Botao>
+          <Botao
+            variante="contorno"
+            disabled={!checklist.length}
+            onClick={() =>
+              void exportarChecklistPdf({
+                nomeArquivo,
+                regional: regionalCodigo,
+                funcionario,
+                etapas: checklist,
+              })
+            }
+          >
+            <FileDown className="size-4" />
+            PDF
           </Botao>
         </div>
       </div>
