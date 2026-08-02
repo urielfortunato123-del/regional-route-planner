@@ -64,6 +64,67 @@ export type Database = {
           },
         ]
       }
+      auditoria_log: {
+        Row: {
+          acao: string
+          criado_em: string
+          dados: Json
+          detalhe: string | null
+          funcionario_id: string | null
+          funcionario_nome: string | null
+          id: string
+          importacao_id: string | null
+          regional_codigo: string | null
+          regional_id: string | null
+        }
+        Insert: {
+          acao: string
+          criado_em?: string
+          dados?: Json
+          detalhe?: string | null
+          funcionario_id?: string | null
+          funcionario_nome?: string | null
+          id?: string
+          importacao_id?: string | null
+          regional_codigo?: string | null
+          regional_id?: string | null
+        }
+        Update: {
+          acao?: string
+          criado_em?: string
+          dados?: Json
+          detalhe?: string | null
+          funcionario_id?: string | null
+          funcionario_nome?: string | null
+          id?: string
+          importacao_id?: string | null
+          regional_codigo?: string | null
+          regional_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auditoria_log_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auditoria_log_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_pdf"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auditoria_log_regional_id_fkey"
+            columns: ["regional_id"]
+            isOneToOne: false
+            referencedRelation: "regionais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funcionarios: {
         Row: {
           ativo: boolean
@@ -581,6 +642,81 @@ export type Database = {
           },
         ]
       }
+      pipeline_validacoes: {
+        Row: {
+          atualizado_em: string
+          critica: boolean
+          divergencia: number
+          encontrado: number
+          esperado: number
+          etapa: string
+          historico: Json
+          id: string
+          importacao_id: string | null
+          motivo: string | null
+          ordem: number
+          programacao_versao: number
+          regional_codigo: string
+          regional_id: string
+          registros_afetados: Json
+          status: string
+          validado_em: string
+        }
+        Insert: {
+          atualizado_em?: string
+          critica?: boolean
+          divergencia?: number
+          encontrado?: number
+          esperado?: number
+          etapa: string
+          historico?: Json
+          id?: string
+          importacao_id?: string | null
+          motivo?: string | null
+          ordem?: number
+          programacao_versao?: number
+          regional_codigo?: string
+          regional_id: string
+          registros_afetados?: Json
+          status?: string
+          validado_em?: string
+        }
+        Update: {
+          atualizado_em?: string
+          critica?: boolean
+          divergencia?: number
+          encontrado?: number
+          esperado?: number
+          etapa?: string
+          historico?: Json
+          id?: string
+          importacao_id?: string | null
+          motivo?: string | null
+          ordem?: number
+          programacao_versao?: number
+          regional_codigo?: string
+          regional_id?: string
+          registros_afetados?: Json
+          status?: string
+          validado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_validacoes_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_pdf"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_validacoes_regional_id_fkey"
+            columns: ["regional_id"]
+            isOneToOne: false
+            referencedRelation: "regionais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       programacao_eventos: {
         Row: {
           criado_em: string
@@ -1017,6 +1153,99 @@ export type Database = {
             columns: ["usuario_id"]
             isOneToOne: false
             referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      simulacoes_der: {
+        Row: {
+          aguardando_localizacao: number
+          com_erro: number
+          concluido_em: string | null
+          criado_em: string
+          criado_por: string | null
+          detalhes: Json
+          duplicados: number
+          id: string
+          importacao_id: string | null
+          iniciado_em: string
+          ja_localizados: number
+          localizados_fallback: number
+          observacoes: string | null
+          programacao_versao: number
+          regional_codigo: string
+          regional_id: string
+          removidos: number
+          resultado: string
+          tipo_falha: string
+          tipo_simulacao: string
+          total_antes: number
+          total_depois: number
+          total_servicos: number
+        }
+        Insert: {
+          aguardando_localizacao?: number
+          com_erro?: number
+          concluido_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          detalhes?: Json
+          duplicados?: number
+          id?: string
+          importacao_id?: string | null
+          iniciado_em?: string
+          ja_localizados?: number
+          localizados_fallback?: number
+          observacoes?: string | null
+          programacao_versao?: number
+          regional_codigo?: string
+          regional_id: string
+          removidos?: number
+          resultado?: string
+          tipo_falha?: string
+          tipo_simulacao?: string
+          total_antes?: number
+          total_depois?: number
+          total_servicos?: number
+        }
+        Update: {
+          aguardando_localizacao?: number
+          com_erro?: number
+          concluido_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          detalhes?: Json
+          duplicados?: number
+          id?: string
+          importacao_id?: string | null
+          iniciado_em?: string
+          ja_localizados?: number
+          localizados_fallback?: number
+          observacoes?: string | null
+          programacao_versao?: number
+          regional_codigo?: string
+          regional_id?: string
+          removidos?: number
+          resultado?: string
+          tipo_falha?: string
+          tipo_simulacao?: string
+          total_antes?: number
+          total_depois?: number
+          total_servicos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "simulacoes_der_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_pdf"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simulacoes_der_regional_id_fkey"
+            columns: ["regional_id"]
+            isOneToOne: false
+            referencedRelation: "regionais"
             referencedColumns: ["id"]
           },
         ]

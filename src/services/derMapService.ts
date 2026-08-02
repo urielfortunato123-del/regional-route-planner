@@ -196,6 +196,32 @@ function marcarEstado(novo: boolean) {
   for (const fn of ouvintes) fn(novo);
 }
 
+// -------------------------------------------------- simulação de falha do DER
+
+export type FalhaSimuladaDer = "http_403" | "timeout" | "indisponivel";
+
+let falhaSimulada: FalhaSimuladaDer | null = null;
+
+/**
+ * Liga/desliga o bloqueio temporário das consultas ao DER (teste de
+ * contingência). Não altera configuração nem apaga cache: apenas força o
+ * caminho de fallback enquanto está ligado.
+ */
+export function simularFalhaDer(tipo: FalhaSimuladaDer | null) {
+  falhaSimulada = tipo;
+  if (tipo) marcarEstado(true);
+}
+
+export function falhaDerSimulada() {
+  return falhaSimulada;
+}
+
+function erroSimulado(): Error {
+  if (falhaSimulada === "http_403") return new Error("Simulação: DER respondeu HTTP 403.");
+  if (falhaSimulada === "timeout") return new Error("Simulação: tempo esgotado ao consultar o DER.");
+  return new Error("Simulação: serviço do DER indisponível.");
+}
+
 /**
  * Tenta o serviço oficial; em caso de falha usa a última base válida salva.
  * Nunca inventa dados: sem serviço e sem cache, devolve null.
@@ -205,6 +231,7 @@ async function comContingencia<T>(
   buscar: () => Promise<T>,
 ): Promise<{ valor: T; fonte: FonteDado; em: number } | null> {
   try {
+    if (falhaSimulada) throw erroSimulado();
     const valor = await buscar();
     gravarCache(chave, valor);
     marcarEstado(false);
@@ -216,6 +243,7 @@ async function comContingencia<T>(
     return { valor: guardado.valor, fonte: "cache", em: guardado.em };
   }
 }
+
 
 // ---------------------------------------------------------------- consultas
 

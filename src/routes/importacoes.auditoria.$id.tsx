@@ -29,6 +29,8 @@ import { processPendingGeometries } from "@/lib/geometria/job";
 import { ROTULO_GEOMETRIA, ehStatusGeometria } from "@/lib/geometria/status";
 import { validarPersistido } from "@/lib/pdf/validacao-referencia";
 import { exportarDiagnosticoCsv, exportarDiagnosticoPdf } from "@/lib/auditoria/exportar";
+import { ChecklistPipeline } from "@/components/auditoria/ChecklistPipeline";
+import { SimulacaoDer } from "@/components/auditoria/SimulacaoDer";
 
 const rotuloStatusGeometria = (valor: string) =>
   ehStatusGeometria(valor) ? ROTULO_GEOMETRIA[valor] : valor;
@@ -286,6 +288,21 @@ function AuditoriaPagina() {
             </Botao>
           </div>
         </Cartao>
+
+        <ChecklistPipeline
+          funcionarioId={perfil.id}
+          importacaoId={id}
+          regionalCodigo={perfil.regional_codigo}
+          nomeArquivo={importacao?.nome_arquivo ?? "importacao"}
+          funcionario={perfil.nome}
+          aoAtualizar={() => auditoria.refetch()}
+        />
+
+        <SimulacaoDer
+          funcionarioId={perfil.id}
+          importacaoId={id}
+          aoConcluir={() => auditoria.refetch()}
+        />
 
         {consistencia ? (
           <Cartao>
