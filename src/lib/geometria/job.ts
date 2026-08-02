@@ -123,6 +123,8 @@ export async function processPendingGeometries(opcoes: {
   funcionarioId: string;
   importacaoId?: string | null;
   limite?: number;
+  /** Simulação: processa e notifica, mas não grava nada no banco. */
+  simulacao?: boolean;
 }): Promise<ResultadoJob> {
   const inicio = Date.now();
   const vazio = (mensagem: string): ResultadoJob => ({
@@ -220,12 +222,36 @@ export async function processPendingGeometries(opcoes: {
           erro: trecho.observacao ?? null,
         });
         detalhes.push({ id: item.id, status, motivo: trecho.observacao ?? null });
+        publicarEvento({
+          id: `${item.id}-${Date.now()}`,
+          servicoId: item.id,
+          rotulo: rotuloServico(item),
+          statusAnterior: item.status_geometria ?? "AGUARDANDO_LOCALIZACAO",
+          statusNovo: status,
+          fonte: ultimaFonte,
+          mensagem: trecho.observacao ?? `Localizado via ${ultimaFonte}.`,
+          em: new Date().toISOString(),
+          ok: true,
+          simulacao: Boolean(opcoes.simulacao),
+        });
         concluidos += 1;
       } catch (erro) {
         const motivo = erro instanceof Error ? erro.message : "Falha desconhecida";
         const status = classificarFalha(motivo);
         resultados.push({ id: item.id, status, erro: motivo.slice(0, 300) });
         detalhes.push({ id: item.id, status, motivo });
+        publicarEvento({
+          id: `${item.id}-${Date.now()}`,
+          servicoId: item.id,
+          rotulo: rotuloServico(item),
+          statusAnterior: item.status_geometria ?? "AGUARDANDO_LOCALIZACAO",
+          statusNovo: status,
+          fonte: "—",
+          mensagem: motivo,
+          em: new Date().toISOString(),
+          ok: false,
+          simulacao: Boolean(opcoes.simulacao),
+        });
         comErro += 1;
       } finally {
         travados.delete(item.id);
@@ -241,7 +267,7 @@ export async function processPendingGeometries(opcoes: {
       });
     }
 
-    if (resultados.length) {
+    if (resultados.length && !opcoes.simulacao) {
       await salvarGeometrias({ data: { funcionarioId: opcoes.funcionarioId, itens: resultados } });
     }
 
@@ -253,7 +279,9 @@ export async function processPendingGeometries(opcoes: {
       aguardando: 0,
       fonte: ultimaFonte,
       emAndamento: false,
-      mensagem: `${concluidos} serviço(s) localizado(s), ${comErro} com erro.`,
+      mensagem: opcoes.simulacao
+        ? `Simulação: ${concluidos} localizável(is), ${comErro} com erro (nada foi gravado).`
+        : `${concluidos} serviço(s) localizado(s), ${comErro} com erro.`,
     };
     publicar(final);
     return {
