@@ -10,6 +10,7 @@ import {
   corrigirRegistro,
   excluirRegistro,
   salvarCoordenadas,
+  salvarLocalizacaoManual,
   salvarRota,
 } from "@/lib/programacao.functions";
 import { criarInspecao, criarOcorrencia } from "@/lib/campo.functions";
@@ -20,13 +21,28 @@ function avisar() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENTO));
 }
 
+/** Gera uma chave estável para a operação (idempotência ponta a ponta). */
+export function novaChaveIdempotencia(prefixo: string) {
+  const aleatorio =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefixo}:${aleatorio}`;
+}
+
 export async function enfileirar(
   pendencia: Omit<PendenciaLocal, "id" | "criadoEm" | "tentativas" | "ultimoErro">,
 ) {
   const db = banco();
   if (!db) return;
+  const chave = pendencia.chave ?? novaChaveIdempotencia(pendencia.tipo);
+  // Mesma chave já na fila: não enfileira de novo.
+  const existente = await db.pendencias.where("chave").equals(chave).first();
+  if (existente) return;
   await db.pendencias.add({
     ...pendencia,
+    chave,
+    payload: { ...pendencia.payload, chaveIdempotencia: chave },
     criadoEm: Date.now(),
     tentativas: 0,
     ultimoErro: null,
@@ -49,6 +65,9 @@ async function executar(pendencia: PendenciaLocal) {
     case "correcao":
       await corrigirRegistro({ data: payload });
       return;
+    case "localizacao_manual":
+      await salvarLocalizacaoManual({ data: payload });
+      return;
     case "exclusao":
       await excluirRegistro({ data: payload });
       return;
@@ -66,6 +85,7 @@ async function executar(pendencia: PendenciaLocal) {
       return;
   }
 }
+
 
 let processando = false;
 
