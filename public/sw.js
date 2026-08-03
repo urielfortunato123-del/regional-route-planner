@@ -2,7 +2,7 @@
  * Guarda a casca do aplicativo e os quadradinhos do mapa (OpenStreetMap)
  * já visitados. Dados da programação ficam no IndexedDB, não aqui.
  */
-const VERSAO = "programacao-regional-v1";
+const VERSAO = "programacao-regional-v2";
 const CASCA = `${VERSAO}-casca`;
 const MAPA = `${VERSAO}-mapa`;
 const LIMITE_MAPA = 600;
