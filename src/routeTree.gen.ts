@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as MapaRouteImport } from './routes/mapa'
 import { Route as RotaRouteImport } from './routes/rota'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
 import { Route as ImportacoesIdRouteImport } from './routes/importacoes.$id'
 import { Route as ProgramacaoIndexRouteImport } from './routes/programacao.index'
@@ -38,6 +39,11 @@ const MapaRoute = MapaRouteImport.update({
 const RotaRoute = RotaRouteImport.update({
   id: '/rota',
   path: '/rota',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
@@ -76,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof ConfiguracoesRoute
   '/mapa': typeof MapaRoute
   '/rota': typeof RotaRoute
+  '/api/health': typeof ApiHealthRoute
   '/importacoes/$id': typeof ImportacoesIdRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao/revisar': typeof ProgramacaoRevisarRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof ConfiguracoesRoute
   '/mapa': typeof MapaRoute
   '/rota': typeof RotaRoute
+  '/api/health': typeof ApiHealthRoute
   '/importacoes/$id': typeof ImportacoesIdRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao/revisar': typeof ProgramacaoRevisarRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/configuracoes': typeof ConfiguracoesRoute
   '/mapa': typeof MapaRoute
   '/rota': typeof RotaRoute
+  '/api/health': typeof ApiHealthRoute
   '/importacoes/$id': typeof ImportacoesIdRoute
   '/programacao/importar': typeof ProgramacaoImportarRoute
   '/programacao/revisar': typeof ProgramacaoRevisarRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/mapa'
     | '/rota'
+    | '/api/health'
     | '/importacoes/$id'
     | '/programacao/importar'
     | '/programacao/revisar'
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/mapa'
     | '/rota'
+    | '/api/health'
     | '/importacoes/$id'
     | '/programacao/importar'
     | '/programacao/revisar'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/mapa'
     | '/rota'
+    | '/api/health'
     | '/importacoes/$id'
     | '/programacao/importar'
     | '/programacao/revisar'
@@ -152,6 +164,7 @@ export interface RootRouteChildren {
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   MapaRoute: typeof MapaRoute
   RotaRoute: typeof RotaRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ImportacoesIdRoute: typeof ImportacoesIdRoute
   ProgramacaoImportarRoute: typeof ProgramacaoImportarRoute
   ProgramacaoRevisarRoute: typeof ProgramacaoRevisarRoute
@@ -188,6 +201,13 @@ declare module '@tanstack/react-router' {
       path: '/rota'
       fullPath: '/rota'
       preLoaderRoute: typeof RotaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/importacoes/': {
@@ -240,6 +260,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracoesRoute: ConfiguracoesRoute,
   MapaRoute: MapaRoute,
   RotaRoute: RotaRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ImportacoesIdRoute: ImportacoesIdRoute,
   ProgramacaoImportarRoute: ProgramacaoImportarRoute,
   ProgramacaoRevisarRoute: ProgramacaoRevisarRoute,

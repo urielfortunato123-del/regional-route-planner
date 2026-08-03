@@ -1,39 +1,62 @@
-# Render Blueprint — WebRota (TanStack Start / Node.js)
+# Render Blueprint — Fiscalização DER (TanStack Start / Node.js)
 # Docs: https://render.com/docs/blueprint-spec
-# After connecting your repo, Render reads this file and creates the service automatically.
-# Fill in the secret environment variables in the Render dashboard (or via the env groups below).
+# Nunca coloque segredos aqui: variáveis com `sync: false` são preenchidas no painel do Render.
 
 services:
   - type: web
-    name: webrota
+    name: fiscalizacao-der
     runtime: node
+    # Use a região mais próxima do banco (Supabase). Ajuste se o banco não estiver no leste dos EUA.
+    region: ohio
+    # Instância paga: mantém o serviço sempre ativo (o plano free suspende após 15 min).
     plan: starter
-    # Node 22 LTS — matches the project (Vite 8 / React 19 require Node 18+).
-    nodeVersion: "22.22.0"
-    buildCommand: npm ci && npm run build
-    startCommand: node .output/server/index.mjs
-    healthCheckPath: /
+    branch: main
     autoDeploy: true
+    numInstances: 1
+
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+
+    healthCheckPath: /api/health
+
     envVars:
-      # --- Supabase / Lovable Cloud (client-safe, publishable) ---
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOST
+        value: 0.0.0.0
+      - key: APP_VERSION
+        value: "1.0.0"
+
+      # Gerado pelo Render, nunca versionado
+      - key: SESSION_SECRET
+        generateValue: true
+
+      # --- Segredos / configuração: preencher no painel do Render ---
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OSRM_BASE_URL
+        sync: false
+      - key: STORAGE_BUCKET
+        sync: false
+
+      # --- Variáveis expostas ao navegador (publicáveis, sem chaves privadas) ---
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: VITE_SUPABASE_PROJECT_ID
         sync: false
-      # --- Server-side Supabase (server functions read these at runtime) ---
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_PUBLISHABLE_KEY
-        sync: false
-      - key: SUPABASE_PROJECT_ID
-        sync: false
-      # --- DER-SP map proxy (server-side, used by der.server.ts) ---
       - key: DER_MAP_SERVICE_URL
         sync: false
       - key: VITE_DER_MAP_SERVICE_URL
         sync: false
-      # --- Nitro / runtime tuning ---
-      - key: NODE_ENV
-        value: production
