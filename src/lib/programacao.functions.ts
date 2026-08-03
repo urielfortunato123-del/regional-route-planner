@@ -485,6 +485,8 @@ export const atualizarStatus = createServerFn({ method: "POST" })
         longitude: z.number().optional().nullable(),
         assumir: z.boolean().default(false),
         justificativa: z.string().max(500).optional().nullable(),
+        // Evita gravar duas vezes a mesma conclusão quando a fila offline reenvia.
+        chaveIdempotencia: z.string().max(120).optional().nullable(),
       })
       .parse(d),
   )
