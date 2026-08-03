@@ -59,7 +59,7 @@ function LinhaServico({ s }: { s: ServicoAgenda }) {
           km {s.km_inicial ?? "—"}
           {s.km_final != null && s.km_final !== s.km_inicial ? ` a ${s.km_final}` : ""}
         </span>
-        <Etiqueta tom={s.status === "concluido" ? "sucesso" : "neutro"}>{s.status}</Etiqueta>
+        <Etiqueta tom={s.status === "concluido" ? "ok" : "neutro"}>{s.status}</Etiqueta>
         {!localizado ? <Etiqueta tom="alerta">sem localização</Etiqueta> : null}
       </div>
       <p className="mt-1 text-sm text-foreground">{s.atividade ?? s.descricao ?? "—"}</p>
