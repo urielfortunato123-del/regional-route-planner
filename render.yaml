@@ -1,0 +1,39 @@
+# Render Blueprint — WebRota (TanStack Start / Node.js)
+# Docs: https://render.com/docs/blueprint-spec
+# After connecting your repo, Render reads this file and creates the service automatically.
+# Fill in the secret environment variables in the Render dashboard (or via the env groups below).
+
+services:
+  - type: web
+    name: webrota
+    runtime: node
+    plan: starter
+    # Node 22 LTS — matches the project (Vite 8 / React 19 require Node 18+).
+    nodeVersion: "22.22.0"
+    buildCommand: npm ci && npm run build
+    startCommand: node .output/server/index.mjs
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # --- Supabase / Lovable Cloud (client-safe, publishable) ---
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_PROJECT_ID
+        sync: false
+      # --- Server-side Supabase (server functions read these at runtime) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_PROJECT_ID
+        sync: false
+      # --- DER-SP map proxy (server-side, used by der.server.ts) ---
+      - key: DER_MAP_SERVICE_URL
+        sync: false
+      - key: VITE_DER_MAP_SERVICE_URL
+        sync: false
+      # --- Nitro / runtime tuning ---
+      - key: NODE_ENV
+        value: production
