@@ -127,6 +127,59 @@ function saidaDoTrecho(item: TrechoProgramado, acesso: PontoAcesso): LatLon {
 
 export type EscolhaAcesso = { itemId: string; tipo: TipoAcesso; lat: number; lon: number; km: number | null; rotulo: string };
 
+/** Comprimento aproximado (metros) de uma ordem de trechos a partir da origem. */
+function custoDaOrdem(
+  ordem: TrechoProgramado[],
+  origem: LatLon,
+  escolherAcesso: (item: TrechoProgramado, de: LatLon) => PontoAcesso,
+): number {
+  let posicao: LatLon = origem;
+  let total = 0;
+  for (const item of ordem) {
+    const acesso = escolherAcesso(item, posicao);
+    total += distanciaMetros(posicao, acesso);
+    posicao = saidaDoTrecho(item, acesso);
+  }
+  return total;
+}
+
+/**
+ * Melhoria 2-opt: inverte pedaços da sequência enquanto o percurso encurtar.
+ * Corrige as idas e voltas que o vizinho mais próximo costuma deixar.
+ */
+export function melhorar2opt(
+  inicial: TrechoProgramado[],
+  origem: LatLon,
+  escolherAcesso: (item: TrechoProgramado, de: LatLon) => PontoAcesso,
+  limitePassadas = 12,
+): TrechoProgramado[] {
+  let melhor = [...inicial];
+  let custoMelhor = custoDaOrdem(melhor, origem, escolherAcesso);
+
+  for (let passada = 0; passada < limitePassadas; passada++) {
+    let houveGanho = false;
+    for (let i = 0; i < melhor.length - 1; i++) {
+      for (let j = i + 1; j < melhor.length; j++) {
+        const candidato = [
+          ...melhor.slice(0, i),
+          ...melhor.slice(i, j + 1).reverse(),
+          ...melhor.slice(j + 1),
+        ];
+        const custo = custoDaOrdem(candidato, origem, escolherAcesso);
+        if (custo < custoMelhor - 1) {
+          melhor = candidato;
+          custoMelhor = custo;
+          houveGanho = true;
+        }
+      }
+    }
+    if (!houveGanho) break;
+  }
+
+  return melhor;
+}
+
+
 /**
  * Sequencia os trechos partindo da posição informada, escolhendo para cada um
  * o acesso mais próximo do ponto onde o veículo estará, e mede o percurso
@@ -163,6 +216,7 @@ export async function gerarRotaInteligente(opcoes: {
     return melhor;
   };
 
+  // 1ª passada: vizinho mais próximo.
   while (restantes.length) {
     let indice = 0;
     if (otimizar) {
@@ -182,12 +236,29 @@ export async function gerarRotaInteligente(opcoes: {
     atual = saida;
   }
 
+  // 2ª passada: melhoria 2-opt para desfazer cruzamentos e idas e voltas.
+  if (otimizar && sequencia.length > 2) {
+    const melhorada = melhorar2opt(
+      sequencia.map((s) => s.item),
+      origem,
+      acessoEscolhido,
+    );
+    sequencia.length = 0;
+    let posicao: LatLon = origem;
+    for (const item of melhorada) {
+      const acesso = acessoEscolhido(item, posicao);
+      const saida = saidaDoTrecho(item, acesso);
+      sequencia.push({ item, acesso, saida });
+      posicao = saida;
+    }
+  }
 
   const pontos: LatLon[] = [origem];
   for (const s of sequencia) {
     pontos.push({ lat: s.acesso.lat, lon: s.acesso.lon });
     if (distanciaMetros(s.acesso, s.saida) > 60) pontos.push(s.saida);
   }
+
 
   let pelaEstrada = false;
   let motivo: string | null = null;

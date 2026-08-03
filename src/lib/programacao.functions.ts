@@ -485,6 +485,8 @@ export const atualizarStatus = createServerFn({ method: "POST" })
         longitude: z.number().optional().nullable(),
         assumir: z.boolean().default(false),
         justificativa: z.string().max(500).optional().nullable(),
+        // Evita gravar duas vezes a mesma conclusão quando a fila offline reenvia.
+        chaveIdempotencia: z.string().max(120).optional().nullable(),
       })
       .parse(d),
   )
@@ -492,6 +494,17 @@ export const atualizarStatus = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { carregarPerfil } = await import("@/lib/programacao.server");
     const perfil = await carregarPerfil(data.funcionarioId);
+
+    // Idempotência: se esta mesma operação já subiu antes, não repete nada.
+    if (data.chaveIdempotencia) {
+      const { data: jaGravado } = await supabaseAdmin
+        .from("programacao_eventos")
+        .select("id")
+        .eq("chave_idempotencia", data.chaveIdempotencia)
+        .maybeSingle();
+      if (jaGravado) return { ok: true, repetido: true };
+    }
+
 
     const { data: registro, error: erroBusca } = await supabaseAdmin
       .from("programacoes")
@@ -531,10 +544,12 @@ export const atualizarStatus = createServerFn({ method: "POST" })
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
       observacao: [data.observacao, data.justificativa].filter(Boolean).join(" | ") || null,
-    });
+      chave_idempotencia: data.chaveIdempotencia ?? null,
+    } as never);
 
-    return { ok: true };
+    return { ok: true, repetido: false };
   });
+
 
 export const resumoDoDia = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ funcionarioId: z.string().uuid() }).parse(d))
@@ -755,3 +770,265 @@ export const excluirRota = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+// ==================== LOCALIZAÇÃO MANUAL ====================
+
+/**
+ * Correção manual de localização feita pelo fiscal em campo.
+ * O que é confirmado à mão tem prioridade: o job automático de geometria
+ * nunca sobrescreve um registro marcado como LOCALIZADA_MANUAL.
+ */
+export const salvarLocalizacaoManual = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        funcionarioId: z.string().uuid(),
+        programacaoId: z.string().uuid(),
+        rodovia: z.string().max(60).nullable().optional(),
+        km_inicial: z.number().nullable().optional(),
+        km_final: z.number().nullable().optional(),
+        sentido: z.string().max(30).nullable().optional(),
+        municipio: z.string().max(120).nullable().optional(),
+        referencia_local: z.string().max(300).nullable().optional(),
+        latitude: z.number().min(-90).max(90).nullable().optional(),
+        longitude: z.number().min(-180).max(180).nullable().optional(),
+        observacao: z.string().max(1000).nullable().optional(),
+        chaveIdempotencia: z.string().max(120).nullable().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const perfil = await carregarPerfil(data.funcionarioId);
+
+    const { data: registro, error: erroBusca } = await supabaseAdmin
+      .from("programacoes")
+      .select("id, regional_id, rodovia, km_inicial, km_final")
+      .eq("id", data.programacaoId)
+      .maybeSingle();
+    if (erroBusca) throw new Error(erroBusca.message);
+    if (!registro) throw new Error("Serviço não encontrado.");
+    if (registro.regional_id !== perfil.regional_id) {
+      throw new Error("Este serviço não pertence à sua regional.");
+    }
+
+    const rodovia = data.rodovia ?? registro.rodovia;
+    const kmInicial = data.km_inicial ?? registro.km_inicial;
+    const kmFinal = data.km_final ?? registro.km_final ?? kmInicial;
+    const temCoordenada = data.latitude != null && data.longitude != null;
+    if (!temCoordenada && (!rodovia || kmInicial == null)) {
+      throw new Error("Informe a rodovia e o km inicial, ou marque o ponto no mapa.");
+    }
+    if (kmInicial != null && kmFinal != null && kmFinal < kmInicial) {
+      throw new Error("O km final não pode ser menor que o km inicial.");
+    }
+
+    const campos: Record<string, unknown> = {
+      rodovia,
+      km_inicial: kmInicial,
+      km_final: kmFinal,
+      sentido: data.sentido ?? null,
+      municipio: data.municipio ?? null,
+      referencia_local: data.referencia_local ?? null,
+      observacao: data.observacao ?? null,
+      localizacao_manual: true,
+      localizacao_manual_em: new Date().toISOString(),
+      localizacao_manual_por: perfil.nome,
+      ultima_validacao_em: new Date().toISOString(),
+    };
+    if (temCoordenada) {
+      campos["latitude_inicial"] = data.latitude;
+      campos["longitude_inicial"] = data.longitude;
+      campos["localizacao_confirmada"] = true;
+      campos["status_geometria"] = "LOCALIZADA_MANUAL";
+      campos["geometria_fonte"] = "correcao_manual";
+      campos["geometria_erro"] = null;
+    } else {
+      // Sem coordenada ainda: o job passa a ter dados suficientes para localizar.
+      campos["status_geometria"] = "AGUARDANDO_LOCALIZACAO";
+      campos["geometria_erro"] = null;
+    }
+
+    const { error } = await supabaseAdmin
+      .from("programacoes")
+      .update(campos as never)
+      .eq("id", data.programacaoId)
+      .eq("regional_id", perfil.regional_id);
+    if (error) throw new Error(error.message);
+
+    await supabaseAdmin.from("programacao_eventos").insert({
+      programacao_id: data.programacaoId,
+      status: "localizacao_corrigida",
+      usuario_nome: perfil.nome,
+      usuario_id: perfil.id,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      observacao: `Localização corrigida manualmente: ${rodovia ?? "—"} km ${kmInicial ?? "—"}`,
+      chave_idempotencia: data.chaveIdempotencia ?? null,
+    } as never);
+
+    return { ok: true, localizada: temCoordenada };
+  });
+
+/** Registra que o fiscal pediu confirmação da localização ao escritório. */
+export const solicitarConfirmacaoLocalizacao = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        funcionarioId: z.string().uuid(),
+        programacaoId: z.string().uuid(),
+        observacao: z.string().max(1000).nullable().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil } = await import("@/lib/programacao.server");
+    const perfil = await carregarPerfil(data.funcionarioId);
+
+    const { error } = await supabaseAdmin
+      .from("programacoes")
+      .update({
+        solicitacao_confirmacao_em: new Date().toISOString(),
+        solicitacao_confirmacao_por: perfil.nome,
+        observacao: data.observacao ?? null,
+      } as never)
+      .eq("id", data.programacaoId)
+      .eq("regional_id", perfil.regional_id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+// ==================== AGENDA DO DIA (copiloto) ====================
+
+/** Serviço da agenda, já enxuto para trafegar até o aparelho. */
+export type ServicoAgenda = {
+  id: string;
+  rodovia: string | null;
+  km_inicial: number | null;
+  km_final: number | null;
+  atividade: string | null;
+  descricao: string | null;
+  contrato: string | null;
+  equipe: string | null;
+  funcionario: string | null;
+  status: string;
+  data_inicial: string | null;
+  data_final: string | null;
+  latitude_inicial: number | null;
+  longitude_inicial: number | null;
+  latitude_final: number | null;
+  longitude_final: number | null;
+  sentido: string | null;
+  municipio: string | null;
+  referencia_local: string | null;
+  status_geometria: string | null;
+  localizacao_manual: boolean;
+  localizacao_confirmada: boolean;
+  solicitacao_confirmacao_em: string | null;
+  assumido_por: string | null;
+  observacao: string | null;
+};
+
+function comoServicoAgenda(r: Record<string, unknown>): ServicoAgenda {
+  const texto = (c: string) => (typeof r[c] === "string" ? (r[c] as string) : null);
+  const numero = (c: string) => (typeof r[c] === "number" ? (r[c] as number) : null);
+  return {
+    id: String(r["id"]),
+    rodovia: texto("rodovia"),
+    km_inicial: numero("km_inicial"),
+    km_final: numero("km_final"),
+    atividade: texto("atividade"),
+    descricao: texto("descricao"),
+    contrato: texto("contrato"),
+    equipe: texto("equipe"),
+    funcionario: texto("funcionario"),
+    status: texto("status") ?? "pendente",
+    data_inicial: texto("data_inicial"),
+    data_final: texto("data_final"),
+    latitude_inicial: numero("latitude_inicial"),
+    longitude_inicial: numero("longitude_inicial"),
+    latitude_final: numero("latitude_final"),
+    longitude_final: numero("longitude_final"),
+    sentido: texto("sentido"),
+    municipio: texto("municipio"),
+    referencia_local: texto("referencia_local"),
+    status_geometria: texto("status_geometria"),
+    localizacao_manual: r["localizacao_manual"] === true,
+    localizacao_confirmada: r["localizacao_confirmada"] === true,
+    solicitacao_confirmacao_em: texto("solicitacao_confirmacao_em"),
+    assumido_por: texto("assumido_por"),
+    observacao: texto("observacao"),
+  };
+}
+
+/**
+ * Agenda operacional do fiscal: separa a programação da regional em
+ * Hoje / Amanhã / Próximos dias / Pendentes / Concluídos, sempre com o
+ * filtro de regional resolvido no servidor a partir do id do funcionário.
+ */
+export const agendaDoDia = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        funcionarioId: z.string().uuid(),
+        dia: z.string().max(10).optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { carregarPerfil, COLUNAS_PROGRAMACAO } = await import("@/lib/programacao.server");
+    const perfil = await carregarPerfil(data.funcionarioId);
+
+    const { data: registros, error } = await supabaseAdmin
+      .from("programacoes")
+      .select(COLUNAS_PROGRAMACAO)
+      .eq("regional_id", perfil.regional_id)
+      .eq("regional_confirmada", true)
+      .order("data_inicial", { ascending: true })
+      .order("rodovia", { ascending: true })
+      .order("km_inicial", { ascending: true })
+      .limit(2000);
+    if (error) throw new Error(error.message);
+
+    const hoje = data.dia ?? new Date().toISOString().slice(0, 10);
+    const amanha = new Date(new Date(`${hoje}T12:00:00`).getTime() + 86400000)
+      .toISOString()
+      .slice(0, 10);
+
+    const todos = ((registros ?? []) as unknown as Array<Record<string, unknown>>).map(
+      comoServicoAgenda,
+    );
+    const noDia = (r: ServicoAgenda, dia: string) => {
+      const i = r.data_inicial;
+      if (!i) return false;
+      return i <= dia && (r.data_final ?? i) >= dia;
+    };
+    const concluido = (r: ServicoAgenda) => r.status === "concluido";
+    const localizado = (r: ServicoAgenda) =>
+      r.latitude_inicial != null && r.longitude_inicial != null;
+
+    const doDia = todos.filter((r) => noDia(r, hoje));
+
+    return {
+      perfil,
+      dia: hoje,
+      hoje: doDia,
+      amanha: todos.filter((r) => noDia(r, amanha)),
+      proximos: todos.filter((r) => !!r.data_inicial && r.data_inicial > amanha),
+      pendentes: todos.filter((r) => !concluido(r)),
+      concluidos: todos.filter(concluido),
+      // Serviços que não entram na rota por falta de localização.
+      naoLocalizados: todos.filter((r) => !concluido(r) && !localizado(r)),
+      resumoDia: {
+        total: doDia.length,
+        concluidos: doDia.filter(concluido).length,
+        ativos: doDia.filter((r) => !concluido(r)).length,
+        naRota: doDia.filter((r) => !concluido(r) && localizado(r)).length,
+        semLocalizacao: doDia.filter((r) => !concluido(r) && !localizado(r)).length,
+      },
+    };
+  });
+

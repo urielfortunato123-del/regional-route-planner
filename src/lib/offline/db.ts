@@ -68,9 +68,11 @@ export type RegistroCampoLocal = {
 export type PendenciaLocal = {
   id?: number;
   regional_codigo: string;
-  tipo: "status" | "correcao" | "exclusao" | "rota" | "coordenadas" | "inspecao" | "ocorrencia";
+  tipo: "status" | "correcao" | "exclusao" | "rota" | "coordenadas" | "inspecao" | "ocorrencia" | "localizacao_manual";
   payload: Record<string, unknown>;
   descricao: string;
+  /** Chave de idempotência: a mesma operação nunca sobe duas vezes. */
+  chave?: string;
   criadoEm: number;
   tentativas: number;
   ultimoErro: string | null;
@@ -101,6 +103,10 @@ class BancoLocal extends Dexie {
     });
     this.version(3).stores({
       campo: "id, regional_codigo, tipo, pendente, criadoEm",
+    });
+    // v4: chave de idempotência na fila, para nada subir duas vezes.
+    this.version(4).stores({
+      pendencias: "++id, regional_codigo, tipo, criadoEm, &chave",
     });
   }
 }
