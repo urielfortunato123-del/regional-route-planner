@@ -64,12 +64,14 @@ self.addEventListener("fetch", (evento) => {
   evento.respondWith(
     fetch(requisicao)
       .then(async (resposta) => {
+        // Só guardamos respostas boas: um 404 de arquivo antigo não vira reserva.
         if (resposta.ok) {
           const cache = await caches.open(CASCA);
           await cache.put(requisicao, resposta.clone());
         }
         return resposta;
       })
+
       .catch(async () => {
         const cache = await caches.open(CASCA);
         const guardado = await cache.match(requisicao);
