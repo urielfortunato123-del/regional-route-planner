@@ -495,6 +495,17 @@ export const atualizarStatus = createServerFn({ method: "POST" })
     const { carregarPerfil } = await import("@/lib/programacao.server");
     const perfil = await carregarPerfil(data.funcionarioId);
 
+    // Idempotência: se esta mesma operação já subiu antes, não repete nada.
+    if (data.chaveIdempotencia) {
+      const { data: jaGravado } = await supabaseAdmin
+        .from("programacao_eventos")
+        .select("id")
+        .eq("chave_idempotencia", data.chaveIdempotencia)
+        .maybeSingle();
+      if (jaGravado) return { ok: true, repetido: true };
+    }
+
+
     const { data: registro, error: erroBusca } = await supabaseAdmin
       .from("programacoes")
       .select("id, regional_id, assumido_por, assumido_em")
