@@ -902,6 +902,67 @@ export const solicitarConfirmacaoLocalizacao = createServerFn({ method: "POST" }
 
 // ==================== AGENDA DO DIA (copiloto) ====================
 
+/** Serviço da agenda, já enxuto para trafegar até o aparelho. */
+export type ServicoAgenda = {
+  id: string;
+  rodovia: string | null;
+  km_inicial: number | null;
+  km_final: number | null;
+  atividade: string | null;
+  descricao: string | null;
+  contrato: string | null;
+  equipe: string | null;
+  funcionario: string | null;
+  status: string;
+  data_inicial: string | null;
+  data_final: string | null;
+  latitude_inicial: number | null;
+  longitude_inicial: number | null;
+  latitude_final: number | null;
+  longitude_final: number | null;
+  sentido: string | null;
+  municipio: string | null;
+  referencia_local: string | null;
+  status_geometria: string | null;
+  localizacao_manual: boolean;
+  localizacao_confirmada: boolean;
+  solicitacao_confirmacao_em: string | null;
+  assumido_por: string | null;
+  observacao: string | null;
+};
+
+function comoServicoAgenda(r: Record<string, unknown>): ServicoAgenda {
+  const texto = (c: string) => (typeof r[c] === "string" ? (r[c] as string) : null);
+  const numero = (c: string) => (typeof r[c] === "number" ? (r[c] as number) : null);
+  return {
+    id: String(r["id"]),
+    rodovia: texto("rodovia"),
+    km_inicial: numero("km_inicial"),
+    km_final: numero("km_final"),
+    atividade: texto("atividade"),
+    descricao: texto("descricao"),
+    contrato: texto("contrato"),
+    equipe: texto("equipe"),
+    funcionario: texto("funcionario"),
+    status: texto("status") ?? "pendente",
+    data_inicial: texto("data_inicial"),
+    data_final: texto("data_final"),
+    latitude_inicial: numero("latitude_inicial"),
+    longitude_inicial: numero("longitude_inicial"),
+    latitude_final: numero("latitude_final"),
+    longitude_final: numero("longitude_final"),
+    sentido: texto("sentido"),
+    municipio: texto("municipio"),
+    referencia_local: texto("referencia_local"),
+    status_geometria: texto("status_geometria"),
+    localizacao_manual: r["localizacao_manual"] === true,
+    localizacao_confirmada: r["localizacao_confirmada"] === true,
+    solicitacao_confirmacao_em: texto("solicitacao_confirmacao_em"),
+    assumido_por: texto("assumido_por"),
+    observacao: texto("observacao"),
+  };
+}
+
 /**
  * Agenda operacional do fiscal: separa a programação da regional em
  * Hoje / Amanhã / Próximos dias / Pendentes / Concluídos, sempre com o
@@ -937,18 +998,20 @@ export const agendaDoDia = createServerFn({ method: "POST" })
       .toISOString()
       .slice(0, 10);
 
-    const todos = (registros ?? []) as Array<Record<string, unknown>>;
-    const noDia = (r: Record<string, unknown>, dia: string) => {
-      const i = (r["data_inicial"] as string | null) ?? null;
-      const f = (r["data_final"] as string | null) ?? i;
+    const todos = ((registros ?? []) as unknown as Array<Record<string, unknown>>).map(
+      comoServicoAgenda,
+    );
+    const noDia = (r: ServicoAgenda, dia: string) => {
+      const i = r.data_inicial;
       if (!i) return false;
-      return i <= dia && (f ?? i) >= dia;
+      return i <= dia && (r.data_final ?? i) >= dia;
     };
-    const concluido = (r: Record<string, unknown>) => r["status"] === "concluido";
-    const localizado = (r: Record<string, unknown>) =>
-      typeof r["latitude_inicial"] === "number" && typeof r["longitude_inicial"] === "number";
+    const concluido = (r: ServicoAgenda) => r.status === "concluido";
+    const localizado = (r: ServicoAgenda) =>
+      r.latitude_inicial != null && r.longitude_inicial != null;
 
     const doDia = todos.filter((r) => noDia(r, hoje));
+
     return {
       perfil,
       dia: hoje,
