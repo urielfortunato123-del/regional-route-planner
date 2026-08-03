@@ -68,9 +68,11 @@ export type RegistroCampoLocal = {
 export type PendenciaLocal = {
   id?: number;
   regional_codigo: string;
-  tipo: "status" | "correcao" | "exclusao" | "rota" | "coordenadas" | "inspecao" | "ocorrencia";
+  tipo: "status" | "correcao" | "exclusao" | "rota" | "coordenadas" | "inspecao" | "ocorrencia" | "localizacao_manual";
   payload: Record<string, unknown>;
   descricao: string;
+  /** Chave de idempotência: a mesma operação nunca sobe duas vezes. */
+  chave?: string;
   criadoEm: number;
   tentativas: number;
   ultimoErro: string | null;
