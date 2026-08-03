@@ -719,6 +719,7 @@ export type Database = {
       }
       programacao_eventos: {
         Row: {
+          chave_idempotencia: string | null
           criado_em: string
           fotos: string[]
           id: string
@@ -731,6 +732,7 @@ export type Database = {
           usuario_nome: string | null
         }
         Insert: {
+          chave_idempotencia?: string | null
           criado_em?: string
           fotos?: string[]
           id?: string
@@ -743,6 +745,7 @@ export type Database = {
           usuario_nome?: string | null
         }
         Update: {
+          chave_idempotencia?: string | null
           criado_em?: string
           fotos?: string[]
           id?: string
@@ -805,21 +808,29 @@ export type Database = {
           latitude_inicial: number | null
           linha_bruta: string | null
           localizacao_confirmada: boolean
+          localizacao_manual: boolean
+          localizacao_manual_em: string | null
+          localizacao_manual_por: string | null
           localizacao_precisao_m: number | null
           longitude_final: number | null
           longitude_inicial: number | null
           medicao: string | null
           motivo_conferencia: string | null
+          municipio: string | null
           observacao: string | null
           pagina_pdf: number | null
           periodo_fim_esperado: string | null
           periodo_inicio_esperado: string | null
           persistido_em: string
+          referencia_local: string | null
           regional_codigo: string | null
           regional_confirmada: boolean
           regional_id: string | null
           regional_origem: string | null
           rodovia: string | null
+          sentido: string | null
+          solicitacao_confirmacao_em: string | null
+          solicitacao_confirmacao_por: string | null
           status: string
           status_conferencia: string
           status_geometria: string
@@ -858,21 +869,29 @@ export type Database = {
           latitude_inicial?: number | null
           linha_bruta?: string | null
           localizacao_confirmada?: boolean
+          localizacao_manual?: boolean
+          localizacao_manual_em?: string | null
+          localizacao_manual_por?: string | null
           localizacao_precisao_m?: number | null
           longitude_final?: number | null
           longitude_inicial?: number | null
           medicao?: string | null
           motivo_conferencia?: string | null
+          municipio?: string | null
           observacao?: string | null
           pagina_pdf?: number | null
           periodo_fim_esperado?: string | null
           periodo_inicio_esperado?: string | null
           persistido_em?: string
+          referencia_local?: string | null
           regional_codigo?: string | null
           regional_confirmada?: boolean
           regional_id?: string | null
           regional_origem?: string | null
           rodovia?: string | null
+          sentido?: string | null
+          solicitacao_confirmacao_em?: string | null
+          solicitacao_confirmacao_por?: string | null
           status?: string
           status_conferencia?: string
           status_geometria?: string
@@ -911,21 +930,29 @@ export type Database = {
           latitude_inicial?: number | null
           linha_bruta?: string | null
           localizacao_confirmada?: boolean
+          localizacao_manual?: boolean
+          localizacao_manual_em?: string | null
+          localizacao_manual_por?: string | null
           localizacao_precisao_m?: number | null
           longitude_final?: number | null
           longitude_inicial?: number | null
           medicao?: string | null
           motivo_conferencia?: string | null
+          municipio?: string | null
           observacao?: string | null
           pagina_pdf?: number | null
           periodo_fim_esperado?: string | null
           periodo_inicio_esperado?: string | null
           persistido_em?: string
+          referencia_local?: string | null
           regional_codigo?: string | null
           regional_confirmada?: boolean
           regional_id?: string | null
           regional_origem?: string | null
           rodovia?: string | null
+          sentido?: string | null
+          solicitacao_confirmacao_em?: string | null
+          solicitacao_confirmacao_por?: string | null
           status?: string
           status_conferencia?: string
           status_geometria?: string
