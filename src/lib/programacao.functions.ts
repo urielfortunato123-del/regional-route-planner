@@ -1017,10 +1017,7 @@ export const agendaDoDia = createServerFn({ method: "POST" })
       dia: hoje,
       hoje: doDia,
       amanha: todos.filter((r) => noDia(r, amanha)),
-      proximos: todos.filter((r) => {
-        const i = (r["data_inicial"] as string | null) ?? null;
-        return !!i && i > amanha;
-      }),
+      proximos: todos.filter((r) => !!r.data_inicial && r.data_inicial > amanha),
       pendentes: todos.filter((r) => !concluido(r)),
       concluidos: todos.filter(concluido),
       // Serviços que não entram na rota por falta de localização.
