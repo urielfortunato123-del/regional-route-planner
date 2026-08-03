@@ -163,6 +163,7 @@ export async function gerarRotaInteligente(opcoes: {
     return melhor;
   };
 
+  // 1ª passada: vizinho mais próximo.
   while (restantes.length) {
     let indice = 0;
     if (otimizar) {
@@ -182,12 +183,29 @@ export async function gerarRotaInteligente(opcoes: {
     atual = saida;
   }
 
+  // 2ª passada: melhoria 2-opt para desfazer cruzamentos e idas e voltas.
+  if (otimizar && sequencia.length > 2) {
+    const melhorada = melhorar2opt(
+      sequencia.map((s) => s.item),
+      origem,
+      acessoEscolhido,
+    );
+    sequencia.length = 0;
+    let posicao: LatLon = origem;
+    for (const item of melhorada) {
+      const acesso = acessoEscolhido(item, posicao);
+      const saida = saidaDoTrecho(item, acesso);
+      sequencia.push({ item, acesso, saida });
+      posicao = saida;
+    }
+  }
 
   const pontos: LatLon[] = [origem];
   for (const s of sequencia) {
     pontos.push({ lat: s.acesso.lat, lon: s.acesso.lon });
     if (distanciaMetros(s.acesso, s.saida) > 60) pontos.push(s.saida);
   }
+
 
   let pelaEstrada = false;
   let motivo: string | null = null;
