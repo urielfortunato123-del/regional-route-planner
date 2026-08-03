@@ -2,7 +2,7 @@
  * Guarda a casca do aplicativo e os quadradinhos do mapa (OpenStreetMap)
  * já visitados. Dados da programação ficam no IndexedDB, não aqui.
  */
-const VERSAO = "programacao-regional-v1";
+const VERSAO = "programacao-regional-v2";
 const CASCA = `${VERSAO}-casca`;
 const MAPA = `${VERSAO}-mapa`;
 const LIMITE_MAPA = 600;
@@ -64,12 +64,14 @@ self.addEventListener("fetch", (evento) => {
   evento.respondWith(
     fetch(requisicao)
       .then(async (resposta) => {
+        // Só guardamos respostas boas: um 404 de arquivo antigo não vira reserva.
         if (resposta.ok) {
           const cache = await caches.open(CASCA);
           await cache.put(requisicao, resposta.clone());
         }
         return resposta;
       })
+
       .catch(async () => {
         const cache = await caches.open(CASCA);
         const guardado = await cache.match(requisicao);
