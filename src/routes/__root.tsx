@@ -122,6 +122,13 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Se um pedaço antigo do aplicativo não existir mais após uma publicação,
+  // limpa os caches e recarrega em vez de deixar a tela em branco.
+  useEffect(() => {
+    limparMarcaRecarga();
+    return instalarRecuperacaoDeChunk();
+  }, []);
+
   // Registra o service worker que mantém o aplicativo utilizável sem sinal.
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -130,6 +137,7 @@ function RootComponent() {
     if (document.readyState === "complete") void registrar();
     else window.addEventListener("load", registrar, { once: true });
   }, []);
+
 
   return (
     <QueryClientProvider client={queryClient}>
