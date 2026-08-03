@@ -43,7 +43,7 @@ export async function carregarPerfil(funcionarioId: string): Promise<Perfil> {
 }
 
 export const COLUNAS_PROGRAMACAO =
-  "id, regional_id, regional_codigo, regional_confirmada, equipe, funcionario, categoria, contrato, atividade, rodovia, km_inicial, km_final, descricao, data_inicial, data_final, medicao, observacao, pagina_pdf, status, assumido_por, assumido_em, latitude_inicial, longitude_inicial, latitude_final, longitude_final, localizacao_confirmada, arquivo_id, importacao_id, status_geometria, geometria_fonte, geometria_precisao, geometria_erro, geometria, geometria_processada_em, persistido_em, ultima_validacao_em, status_conferencia, motivo_conferencia, data_fora_periodo, periodo_inicio_esperado, periodo_fim_esperado, conferido_em, conferido_por, atualizado_em";
+  "id, regional_id, regional_codigo, regional_confirmada, equipe, funcionario, categoria, contrato, atividade, rodovia, km_inicial, km_final, descricao, data_inicial, data_final, medicao, observacao, pagina_pdf, status, assumido_por, assumido_em, latitude_inicial, longitude_inicial, latitude_final, longitude_final, localizacao_confirmada, sentido, municipio, referencia_local, localizacao_manual, localizacao_manual_em, localizacao_manual_por, solicitacao_confirmacao_em, solicitacao_confirmacao_por, arquivo_id, importacao_id, status_geometria, geometria_fonte, geometria_precisao, geometria_erro, geometria, geometria_processada_em, persistido_em, ultima_validacao_em, status_conferencia, motivo_conferencia, data_fora_periodo, periodo_inicio_esperado, periodo_fim_esperado, conferido_em, conferido_por, atualizado_em";
 
 /** Chave usada para detectar registros repetidos entre importações. */
 export function montarChaveDuplicidade(r: {
