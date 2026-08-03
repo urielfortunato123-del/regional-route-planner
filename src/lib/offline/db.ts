@@ -102,6 +102,10 @@ class BancoLocal extends Dexie {
     this.version(3).stores({
       campo: "id, regional_codigo, tipo, pendente, criadoEm",
     });
+    // v4: chave de idempotência na fila, para nada subir duas vezes.
+    this.version(4).stores({
+      pendencias: "++id, regional_codigo, tipo, criadoEm, &chave",
+    });
   }
 }
 
