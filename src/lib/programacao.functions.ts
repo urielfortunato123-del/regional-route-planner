@@ -544,10 +544,12 @@ export const atualizarStatus = createServerFn({ method: "POST" })
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
       observacao: [data.observacao, data.justificativa].filter(Boolean).join(" | ") || null,
-    });
+      chave_idempotencia: data.chaveIdempotencia ?? null,
+    } as never);
 
-    return { ok: true };
+    return { ok: true, repetido: false };
   });
+
 
 export const resumoDoDia = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ funcionarioId: z.string().uuid() }).parse(d))
