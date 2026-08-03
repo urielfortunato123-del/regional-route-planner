@@ -12,6 +12,7 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { instalarRecuperacaoDeChunk, limparMarcaRecarga } from "../lib/recuperar-chunk";
 
 function NotFoundComponent() {
   return (
