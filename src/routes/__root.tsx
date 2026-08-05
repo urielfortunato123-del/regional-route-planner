@@ -132,14 +132,57 @@ function RootComponent() {
     return instalarRecuperacaoDeChunk();
   }, []);
 
-  // Registra o service worker que mantém o aplicativo utilizável sem sinal.
+  // Registra o service worker e avisa quando existe uma nova versão publicada.
+  // A troca só acontece quando o usuário confirma — nada do IndexedDB é apagado.
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     if (window.location.hostname === "localhost") return;
-    const registrar = () => navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+
+    let recarregando = false;
+    const aoTrocar = () => {
+      if (recarregando) return;
+      recarregando = true;
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", aoTrocar);
+
+    const avisar = (esperando: ServiceWorker) => {
+      toast("Nova versão disponível", {
+        description: "Seus registros salvos no aparelho são mantidos.",
+        duration: Infinity,
+        action: {
+          label: "Atualizar",
+          onClick: () => esperando.postMessage({ tipo: "ATIVAR_AGORA" }),
+        },
+      });
+    };
+
+    const registrar = async () => {
+      try {
+        const registro = await navigator.serviceWorker.register("/sw.js");
+        if (registro.waiting) avisar(registro.waiting);
+        registro.addEventListener("updatefound", () => {
+          const novo = registro.installing;
+          if (!novo) return;
+          novo.addEventListener("statechange", () => {
+            if (novo.state === "installed" && navigator.serviceWorker.controller) avisar(novo);
+          });
+        });
+        // Procura atualização ao voltar para o aplicativo.
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") void registro.update();
+        });
+      } catch {
+        /* sem service worker: o aplicativo continua funcionando online */
+      }
+    };
+
     if (document.readyState === "complete") void registrar();
     else window.addEventListener("load", registrar, { once: true });
+
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", aoTrocar);
   }, []);
+
 
 
   return (
