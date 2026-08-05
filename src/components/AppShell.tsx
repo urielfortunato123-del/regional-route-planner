@@ -1,10 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CalendarRange,
+  CheckCircle2,
   CloudOff,
   History,
   Home,
+  Loader2,
   Map,
   RefreshCw,
   Route as RouteIcon,
@@ -15,6 +17,7 @@ import {
 import type { PerfilLocal } from "@/lib/perfil-local";
 import { limparOutrasRegionais } from "@/lib/offline/db";
 import { useSincronizacao } from "@/lib/offline/sync";
+import { EVENTO_SERVIDOR_ONLINE, MENSAGEM_INICIANDO, useEstadoServidor } from "@/lib/servidor";
 import { cn } from "@/lib/utils";
 
 export function Cartao({
@@ -123,27 +126,89 @@ const itensMenu = [
   { para: "/configuracoes", rotulo: "Ajustes", icone: Settings },
 ] as const;
 
-/** Faixa fixa de estado da conexão e da fila de envio. */
+/** Faixa fixa de estado da conexão, da partida do servidor e da fila de envio. */
 export function IndicadorConexao({ regional }: { regional: string }) {
   const { online, pendentes, sincronizando, sincronizar } = useSincronizacao(regional);
-  if (online && pendentes === 0) return null;
-  return (
-    <button
-      onClick={() => void sincronizar()}
-      className={cn(
-        "flex w-full items-center justify-center gap-2 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide",
-        online ? "bg-warning/25 text-warning-foreground" : "bg-destructive/20 text-destructive",
-      )}
-    >
-      {online ? <Wifi className="size-3.5" /> : <CloudOff className="size-3.5" />}
-      {online
-        ? `${pendentes} alteração(ões) aguardando envio`
-        : `Sem conexão — trabalhando offline${pendentes ? ` (${pendentes} na fila)` : ""}`}
-      {online ? (
-        <RefreshCw className={cn("size-3.5", sincronizando && "animate-spin")} />
-      ) : null}
-    </button>
-  );
+  const { estado, iniciando, tentarNovamente } = useEstadoServidor();
+  const [sincronizadoAgora, setSincronizadoAgora] = useState(false);
+
+  // Assim que o servidor responde, a fila guardada no aparelho sobe sozinha.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const aoResponder = () => void sincronizar();
+    window.addEventListener(EVENTO_SERVIDOR_ONLINE, aoResponder);
+    return () => window.removeEventListener(EVENTO_SERVIDOR_ONLINE, aoResponder);
+  }, [sincronizar]);
+
+  // "Sincronizado" aparece por alguns segundos depois do envio da fila.
+  const anterior = useRef(sincronizando);
+  useEffect(() => {
+    if (anterior.current && !sincronizando && pendentes === 0) {
+      setSincronizadoAgora(true);
+      const t = window.setTimeout(() => setSincronizadoAgora(false), 4000);
+      return () => window.clearTimeout(t);
+    }
+    anterior.current = sincronizando;
+    return;
+  }, [sincronizando, pendentes]);
+
+  const offline = !online || estado === "offline";
+
+  if (iniciando) {
+    return (
+      <div className="flex w-full flex-wrap items-center justify-center gap-2 bg-warning/25 px-4 py-1.5 text-[11px] font-semibold text-warning-foreground">
+        <Loader2 className="size-3.5 animate-spin" />
+        <span className="normal-case">{MENSAGEM_INICIANDO}</span>
+        <button onClick={tentarNovamente} className="underline underline-offset-2">
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  if (offline) {
+    return (
+      <button
+        onClick={tentarNovamente}
+        className="flex w-full items-center justify-center gap-2 bg-destructive/20 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-destructive"
+      >
+        <CloudOff className="size-3.5" />
+        {`Offline — trabalhando no aparelho${pendentes ? ` (${pendentes} na fila)` : ""}`}
+        <span className="underline underline-offset-2">Tentar novamente</span>
+      </button>
+    );
+  }
+
+  if (sincronizando) {
+    return (
+      <div className="flex w-full items-center justify-center gap-2 bg-warning/25 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning-foreground">
+        <RefreshCw className="size-3.5 animate-spin" /> Sincronizando...
+      </div>
+    );
+  }
+
+  if (pendentes > 0) {
+    return (
+      <button
+        onClick={() => void sincronizar()}
+        className="flex w-full items-center justify-center gap-2 bg-warning/25 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning-foreground"
+      >
+        <Wifi className="size-3.5" />
+        {`${pendentes} alteração(ões) aguardando envio`}
+        <RefreshCw className="size-3.5" />
+      </button>
+    );
+  }
+
+  if (sincronizadoAgora) {
+    return (
+      <div className="flex w-full items-center justify-center gap-2 bg-success/20 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-success">
+        <CheckCircle2 className="size-3.5" /> Sincronizado
+      </div>
+    );
+  }
+
+  return null;
 }
 
 export function AppShell({
