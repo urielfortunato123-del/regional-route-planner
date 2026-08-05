@@ -2,13 +2,19 @@
  * Guarda a casca do aplicativo e os quadradinhos do mapa (OpenStreetMap)
  * já visitados. Dados da programação ficam no IndexedDB, não aqui.
  */
-const VERSAO = "programacao-regional-v2";
+const VERSAO = "programacao-regional-v3";
 const CASCA = `${VERSAO}-casca`;
 const MAPA = `${VERSAO}-mapa`;
 const LIMITE_MAPA = 600;
 
+// Não usamos skipWaiting automático: a nova versão fica em "waiting" e só
+// assume quando a tela aberta autoriza (evita trocar o app durante um registro).
 self.addEventListener("install", (evento) => {
-  evento.waitUntil(caches.open(CASCA).then((c) => c.addAll(["/"])).then(() => self.skipWaiting()));
+  evento.waitUntil(caches.open(CASCA).then((c) => c.addAll(["/"])));
+});
+
+self.addEventListener("message", (evento) => {
+  if (evento.data && evento.data.tipo === "ATIVAR_AGORA") self.skipWaiting();
 });
 
 self.addEventListener("activate", (evento) => {
