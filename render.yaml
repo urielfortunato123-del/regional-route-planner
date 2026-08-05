@@ -8,8 +8,10 @@ services:
     runtime: node
     # Use a região mais próxima do banco (Supabase). Ajuste se o banco não estiver no leste dos EUA.
     region: ohio
-    # Instância paga: mantém o serviço sempre ativo (o plano free suspende após 15 min).
-    plan: starter
+    # Plano gratuito: o serviço hiberna após ~15 min sem acesso e a primeira
+    # abertura pode levar até ~60 s. O aplicativo trata esse tempo de partida
+    # (aviso, novas tentativas e dados offline) — não há ping artificial.
+    plan: free
     branch: main
     autoDeploy: true
     numInstances: 1

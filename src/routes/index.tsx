@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarRange,
   ClipboardCheck,
@@ -15,6 +15,8 @@ import { Identificacao } from "@/components/Identificacao";
 import { LocalizacaoManual } from "@/components/campo/LocalizacaoManual";
 import { usePerfilLocal } from "@/lib/perfil-local";
 import { agendaDoDia, type ServicoAgenda } from "@/lib/programacao.functions";
+import { lerProgramacoes } from "@/lib/offline/db";
+import { MENSAGEM_INICIANDO, useEstadoServidor } from "@/lib/servidor";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -81,11 +83,23 @@ function Inicio() {
     enabled: !!perfil?.id,
   });
 
+  const { iniciando, estado, tentarNovamente } = useEstadoServidor();
+  const [cacheLocal, setCacheLocal] = useState<ServicoAgenda[]>([]);
+
+  // Dados guardados no aparelho aparecem na hora, sem esperar o servidor.
+  useEffect(() => {
+    if (!perfil) return;
+    void lerProgramacoes(perfil.regional_codigo).then((r) =>
+      setCacheLocal(r as unknown as ServicoAgenda[]),
+    );
+  }, [perfil]);
+
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
 
+  const semServidor = !agenda.data && (agenda.isError || iniciando || estado === "offline");
   const resumo = agenda.data?.resumoDia;
-  const lista: ServicoAgenda[] = agenda.data ? agenda.data[aba] : [];
+  const lista: ServicoAgenda[] = agenda.data ? agenda.data[aba] : semServidor ? cacheLocal : [];
   const semLocalizacao = agenda.data?.naoLocalizados ?? [];
 
   return (
@@ -117,7 +131,27 @@ function Inicio() {
               <p className="text-[11px] text-muted-foreground">Na rota</p>
             </div>
           </div>
-          {agenda.isLoading ? (
+          {semServidor ? (
+            <div className="mt-3 space-y-2 rounded-lg bg-surface p-3">
+              <p className="text-xs text-muted-foreground">
+                {estado === "offline"
+                  ? "Sem conexão. Mostrando a programação guardada no aparelho — você pode registrar observações, status e fotos; tudo entra na fila de envio."
+                  : MENSAGEM_INICIANDO}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {cacheLocal.length} serviço(s) disponíveis offline.
+              </p>
+              <Botao
+                variante="contorno"
+                onClick={() => {
+                  tentarNovamente();
+                  void agenda.refetch();
+                }}
+              >
+                Tentar novamente
+              </Botao>
+            </div>
+          ) : agenda.isLoading ? (
             <p className="mt-3 text-xs text-muted-foreground">Carregando agenda...</p>
           ) : null}
         </Cartao>
@@ -176,7 +210,8 @@ function Inicio() {
                     : "border border-border bg-surface text-muted-foreground"
                 }`}
               >
-                {a.rotulo} ({agenda.data ? agenda.data[a.chave].length : 0})
+                {a.rotulo} (
+                {agenda.data ? agenda.data[a.chave].length : semServidor ? cacheLocal.length : 0})
               </button>
             ))}
           </div>
