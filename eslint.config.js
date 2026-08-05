@@ -6,7 +6,26 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  {
+    ignores: [
+      "dist",
+      "build",
+      "coverage",
+      "node_modules",
+      ".output",
+      ".vinxi",
+      ".nitro",
+      "**/routeTree.gen.ts",
+      // Arquivos gerados automaticamente pela integração de backend.
+      "src/integrations/supabase/types.ts",
+      "src/integrations/supabase/client.ts",
+      "src/integrations/supabase/client.server.ts",
+      "src/integrations/supabase/auth-middleware.ts",
+      "src/integrations/supabase/auth-attacher.ts",
+      "public/**",
+    ],
+  },
+
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
