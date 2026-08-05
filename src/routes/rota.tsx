@@ -570,6 +570,13 @@ function RotaPagina() {
     toast.success("Rota exportada em PDF e guardada no aparelho.");
   }
 
+  // Precisa ficar antes dos retornos antecipados: hooks não podem ser condicionais.
+  const bloqueio = useQuery({
+    queryKey: ["bloqueio-pipeline", perfil?.id],
+    enabled: Boolean(perfil?.id),
+    queryFn: () => checklistPersistido({ funcionarioId: perfil!.id, importacaoId: null }),
+  });
+
   if (!carregado) return <div className="min-h-screen bg-background" />;
   if (!perfil) return <Identificacao aoConcluir={salvar} />;
 
