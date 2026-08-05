@@ -620,11 +620,6 @@ function RotaPagina() {
       ]
     : [];
 
-  const bloqueio = useQuery({
-    queryKey: ["bloqueio-pipeline", perfil?.id],
-    enabled: Boolean(perfil?.id),
-    queryFn: () => checklistPersistido({ funcionarioId: perfil!.id, importacaoId: null }),
-  });
 
   const posicionados = servicos.filter((s) => s.lat != null).length;
   const semPosicao = servicos.length - posicionados;
