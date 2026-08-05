@@ -20,13 +20,7 @@ import { useSincronizacao } from "@/lib/offline/sync";
 import { EVENTO_SERVIDOR_ONLINE, MENSAGEM_INICIANDO, useEstadoServidor } from "@/lib/servidor";
 import { cn } from "@/lib/utils";
 
-export function Cartao({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+export function Cartao({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
       className={cn(
@@ -255,26 +249,24 @@ export function AppShell({
       <nav className="fixed inset-x-0 bottom-0 z-[1100] border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
         <div className="mx-auto flex max-w-3xl">
           {itensMenu.map((item) => {
-              const ativo =
-                item.para === "/" ? caminho === "/" : caminho.startsWith(item.para);
-              const Icone = item.icone;
-              return (
-                <Link
-                  key={item.para}
-                  to={item.para}
-                  className={cn(
-                    "flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold",
-                    ativo ? "text-primary" : "text-muted-foreground",
-                  )}
-                >
-                  <Icone className="size-5" strokeWidth={ativo ? 2.4 : 1.8} />
-                  {item.rotulo}
-                </Link>
+            const ativo = item.para === "/" ? caminho === "/" : caminho.startsWith(item.para);
+            const Icone = item.icone;
+            return (
+              <Link
+                key={item.para}
+                to={item.para}
+                className={cn(
+                  "flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold",
+                  ativo ? "text-primary" : "text-muted-foreground",
+                )}
+              >
+                <Icone className="size-5" strokeWidth={ativo ? 2.4 : 1.8} />
+                {item.rotulo}
+              </Link>
             );
           })}
         </div>
       </nav>
     </div>
   );
-
 }

@@ -99,11 +99,7 @@ function Inicio() {
 
   const semServidor = !agenda.data && (agenda.isError || iniciando || estado === "offline");
   const resumo = agenda.data?.resumoDia;
-  const lista: ServicoAgenda[] = agenda.data
-    ? agenda.data[aba]
-    : semServidor
-      ? cacheLocal
-      : [];
+  const lista: ServicoAgenda[] = agenda.data ? agenda.data[aba] : semServidor ? cacheLocal : [];
   const semLocalizacao = agenda.data?.naoLocalizados ?? [];
 
   return (
@@ -215,7 +211,7 @@ function Inicio() {
                 }`}
               >
                 {a.rotulo} (
-              {agenda.data ? agenda.data[a.chave].length : semServidor ? cacheLocal.length : 0})
+                {agenda.data ? agenda.data[a.chave].length : semServidor ? cacheLocal.length : 0})
               </button>
             ))}
           </div>
