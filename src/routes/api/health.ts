@@ -44,7 +44,9 @@ async function verificarStorage(): Promise<Estado> {
 async function verificarOsrm(): Promise<Estado> {
   const base = process.env["OSRM_BASE_URL"];
   if (!base) return "unknown";
-  return pingar(`${base.replace(/\/$/, "")}/route/v1/driving/-46.6,-23.5;-46.7,-23.6?overview=false`);
+  return pingar(
+    `${base.replace(/\/$/, "")}/route/v1/driving/-46.6,-23.5;-46.7,-23.6?overview=false`,
+  );
 }
 
 /** DER-SP (WebRota): serviço não essencial, tem modo de contingência no app. */

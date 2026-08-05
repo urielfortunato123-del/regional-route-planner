@@ -184,11 +184,13 @@ function RotaPagina() {
     for (let i = 0; i < registros.length; i++) {
       const r = registros[i]!;
       const rodovia = r["rodovia"] ? String(r["rodovia"]) : "";
-      let lat = typeof r["latitude_inicial"] === "number" ? (r["latitude_inicial"] as number) : null;
+      let lat =
+        typeof r["latitude_inicial"] === "number" ? (r["latitude_inicial"] as number) : null;
       let lon =
         typeof r["longitude_inicial"] === "number" ? (r["longitude_inicial"] as number) : null;
       let latFim = typeof r["latitude_final"] === "number" ? (r["latitude_final"] as number) : null;
-      let lonFim = typeof r["longitude_final"] === "number" ? (r["longitude_final"] as number) : null;
+      let lonFim =
+        typeof r["longitude_final"] === "number" ? (r["longitude_final"] as number) : null;
 
       if ((lat == null || lon == null) && rodovia) {
         const trecho = await localizarTrecho(
@@ -552,7 +554,9 @@ function RotaPagina() {
       },
       origem: {
         arquivo: String(registros[0]?.["nome_arquivo"] ?? "programação importada em PDF"),
-        importacaoId: registros[0]?.["importacao_id"] ? String(registros[0]["importacao_id"]) : null,
+        importacaoId: registros[0]?.["importacao_id"]
+          ? String(registros[0]["importacao_id"])
+          : null,
         processadoEm: null,
         versao: null,
       },
@@ -605,21 +609,20 @@ function RotaPagina() {
   const linhas: LinhaMapa[] = percurso?.geometria.length
     ? [{ id: "rota-real", pontos: percurso.geometria, cor: "#b45309", tracejada: false }]
     : partida
-    ? [
-        {
-          id: "rota",
-          pontos: [
-            { lat: partida.lat, lon: partida.lon },
-            ...itensRota
-              .filter((i) => i.latitude != null)
-              .map((i) => ({ lat: i.latitude!, lon: i.longitude! })),
-          ],
-          cor: "#b45309",
-          tracejada: true,
-        },
-      ]
-    : [];
-
+      ? [
+          {
+            id: "rota",
+            pontos: [
+              { lat: partida.lat, lon: partida.lon },
+              ...itensRota
+                .filter((i) => i.latitude != null)
+                .map((i) => ({ lat: i.latitude!, lon: i.longitude! })),
+            ],
+            cor: "#b45309",
+            tracejada: true,
+          },
+        ]
+      : [];
 
   const posicionados = servicos.filter((s) => s.lat != null).length;
   const semPosicao = servicos.length - posicionados;
@@ -728,7 +731,6 @@ function RotaPagina() {
             válida na malha oficial do DER-SP.
           </p>
 
-
           <div className="space-y-1">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <CalendarDays className="size-4" /> Dias com programação
@@ -769,9 +771,7 @@ function RotaPagina() {
                     {d.extensaoKm.toFixed(1)} km · {d.pendentes} pendente(s)
                   </span>
                   {d.semLocalizacao ? (
-                    <span className="block text-destructive">
-                      {d.semLocalizacao} sem posição
-                    </span>
+                    <span className="block text-destructive">{d.semLocalizacao} sem posição</span>
                   ) : null}
                 </button>
               ))}
@@ -847,7 +847,12 @@ function RotaPagina() {
                 <Botao
                   variante="contorno"
                   disabled={calculando || rotaBloqueada}
-                  onClick={() => void calcularNaMalha(ordem.filter((id) => selecionados.includes(id)), false)}
+                  onClick={() =>
+                    void calcularNaMalha(
+                      ordem.filter((id) => selecionados.includes(id)),
+                      false,
+                    )
+                  }
                 >
                   {calculando ? "Calculando..." : "Recalcular pela estrada"}
                 </Botao>
@@ -913,7 +918,11 @@ function RotaPagina() {
                             e.target.checked ? [...v, s.id] : v.filter((x) => x !== s.id),
                           );
                           setOrdem((v) =>
-                            e.target.checked ? (v.includes(s.id) ? v : [...v, s.id]) : v.filter((x) => x !== s.id),
+                            e.target.checked
+                              ? v.includes(s.id)
+                                ? v
+                                : [...v, s.id]
+                              : v.filter((x) => x !== s.id),
                           );
                           setTipo("manual");
                         }}
@@ -986,9 +995,8 @@ function RotaPagina() {
           </>
         ) : (
           <Cartao className="text-center text-sm text-muted-foreground">
-            Toque em “Posicionar serviços”, no cartão acima, para localizar a programação na
-            malha oficial do DER-SP e liberar a geração da rota.
-
+            Toque em “Posicionar serviços”, no cartão acima, para localizar a programação na malha
+            oficial do DER-SP e liberar a geração da rota.
           </Cartao>
         )}
 
